@@ -1,0 +1,79 @@
+<html>
+	<head>
+		<title>Confirm Services</title>
+		<link rel="stylesheet" href="{{url_for('static', filename='css/bootstrap/bootstrap.min.css')}}">
+		<link rel="icon" type="image/x-icon" href="{{url_for('static', filename='favicon.ico')}}">
+
+		<style>
+			h1 {
+				text-align: center;
+			}
+			hr {
+				margin-top: 0;
+				margin-bottom: 0;
+				border-bottom: dotted black;
+			}
+			button {
+				width: 100%;
+				height: 100%
+			}
+		</style>
+	</head>
+	<body>
+		<div class="container">
+			<div class="row">
+				<div class="col-lg-12">
+					<h1>Confirm VLANs for {{ customer }}</h1>
+				</div>
+			</div>
+			<hr />
+			<div class="row">
+				<div class="col-md-4">
+					<h3>These services were found on device interfaces but not in the service input</h3>
+				</div>
+				<div class="col-md-4">
+					<h3>Global is usable by all sites (default), otherwise site-specific</h3>
+				</div>
+				<div class="col-md-4">
+					<h3>These VLANs have been added to the service input using default names</h3>
+				</div>
+			</div>
+			<hr />
+			<br />
+			<div style="overflow-y: scroll; height: 60%">
+				<table class="table table-striped table-hover">
+					<thead class="thead-dark" style="position: sticky; top: 0%">
+						<th scope="col">VLAN</th>
+						<th scope="col">TYPE</th>
+						<th scope="col">SITE</th>
+						<th scope="col">NAME</th>
+					</thead>
+					<tbody>
+						{% for service in list_missing %}
+						<tr>
+							<td scope="row">{{ service.vlan }}</td>
+							<td>{{ service.type }}</td>
+							<td>{{ service.site }}</td>
+							<td>{{ service.name }}</td>
+						</tr>
+						{% endfor %}
+					</tbody>
+				</table>
+			</div>
+			<br />
+			<hr />
+			<br />
+			<div class="row">
+				<div class="col-md-6">
+					<button onclick="location.href='/{{ customer }}/{{ timestamp }}/load-network/0';">⟸ return</button>
+				</div>
+				<div class="col-md-6">
+					<form method="post" action="/{{ customer }}/{{ timestamp }}/generate-preview">
+						<input type="hidden" id="flag_prescan" name="flag_prescan" value="{{ flag_prescan }}">
+						<button type="submit">submit ⟹</button>
+					</form>
+				</div>
+			</div>
+		</div>
+	</body>
+</html>
