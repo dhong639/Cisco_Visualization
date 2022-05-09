@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<title>Choose Customer and Save File</title>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, initial-scale=1">
+
+		<link rel="stylesheet" href="{{url_for('static', filename='css/bootstrap/bootstrap.min.css')}}">
+
+		<!--<link rel="icon" type="image/x-icon" href="../static/favicon.ico">-->
+		<link rel="icon" type="image/x-icon" href="{{url_for('static', filename='favicon.ico')}}">
+
+		<style>
+			h1, h2, h3{
+				text-align: center;
+				width: 100%;
+			}
+			button, input, form {
+				width: 100%;
+				/*height: 100%;*/
+			}
+			.hidden {
+				display: none;
+			}
+			button:active {
+				background-color: #000000;
+				color: #FFFFFF
+			}
+			option {
+				font-size: 150%;
+			}
+		</style>
+	</head>
+	<body>
+		<div class="container">
+			<div class="row">
+				<div class="col-lg-12">
+					<h1>Welcome to the Beyond Edge Brownfield Transition Process</h1>
+					<h2>New users must provide names. Existing users can load existing saves. Deleted saves cannot be recovered. </h2>
+				</div>
+			</div>
+			<hr />
+			<div class="row">
+				<div class="col-md-2">
+					<button onclick="scroll_select(false)">
+						<h3>ᐊ Prev</h3>
+					</button>
+				</div>
+				<div class="col-md-8" id="choose_customer">
+					<div class="row" id="select_newCustomer">
+						<div class="col-sm-4">
+							<h2>
+								<label for="new_customer">New customer:</label>
+							</h2>
+						</div>
+						<div class="col-sm-8">
+							<input type="text" id="new_customer" style="height: 90%;">
+						</div>
+					</div>
+					<div class="row hidden" id="select_existingCustomer">
+						<h2 id="existing_customer"></h2>
+					</div>
+				</div>
+				<div class="col-md-2">
+					<button onclick="scroll_select(true)">
+						<h3>Next ᐅ</h3>
+					</button>
+				</div>
+			</div>
+			<hr />
+			<div class="row">
+				<div class="col-sm-12">
+					<h2>Save files available for user: </h2>
+				</div>
+			</div>
+			<div class="row">
+				<div class="col-sm-12">
+					<select class="custom-select custom-select-lg" id="select_saves" size="10" onchange="show_save()"></select>
+				</div>
+			</div>
+			<hr />
+			<!--
+				create new save or load existing save
+					left button creates new save
+					right button loads existing save
+						disabled by default
+						enabled if option is selected
+					populate hidden input fields upon submitting form
+			-->
+			<form method="post" action="/login/load-customer">
+				<input type="hidden" id="customer" name="customer" value="">
+				<input type="hidden" id="timestamp" name="timestamp" value="">
+				<input type="hidden" id="flag_new" name="flag_new" value="">
+				<div class="row">
+					<div class="col-lg-6">
+						<button type="submit" onclick="new_save()">
+							<h2>Create new network</h2>
+						</button>
+					</div>
+					<div class="col-lg-6">
+						<button type="submit" id='load_save' onclick="existing_save()" disabled>
+							<h2>Load existing save</h2>
+						</button>
+					</div>
+				</div>
+			</form>
+		</div>
+	</body>
+	<script>
+		var data = JSON.parse('{{ dict_saveFiles | tojson }}')
+		//var data = {{ dict_saveFiles | tojson }}
+		// list of customer names for testing
+		var list_customers = Object.keys(data)
+		list_customers.sort()
+		list_customers.unshift(null)
+		// current selected customer
+		var index = 0
+		// current number of save files displayed
+		// used to clear and populate the select field
+		var count_saves = 0
+
+		/*
+		*	scroll_select
+		*		input
+		*			flag	bool	determine how to change the index
+		*		function
+		*			determine which customer save files should be loaded, if any
+		*/
+		function scroll_select(flag) {
+			// increment index if flag is true, otherwise decrement
+			index = flag ? index + 1 : index - 1
+			// check for underflow, set as length of customer list if found
+			index = index < 0 ? list_customers.length - 1 : index
+			// check for overflow, set as 0 if found
+			index = index >= list_customers.length ? 0 : index
+
+			// load saves of selected customer (if not applicable, loads nothing)
+			document.getElementById('existing_customer').innerHTML = list_customers[index]
+
+			// determine next item in carousel
+			var select_newCustomer = document.getElementById('select_newCustomer')
+			var select_existingCustomer = document.getElementById('select_existingCustomer')
+			if(index == 0) {
+				select_newCustomer.classList.remove('hidden')
+				select_existingCustomer.classList.add('hidden')
+				document.getElementById('load_save').disabled = true
+			}
+			else {
+				select_newCustomer.classList.add('hidden')
+				select_existingCustomer.classList.remove('hidden')
+				document.getElementById('load_save').disabled = true
+			}
+			// load options for select menu
+			get_saves(list_customers[index])
+		}
+		/*
+		*	get_saves
+		*		input:
+		*			customer	string	name of customer
+		*		function:
+		*			for a given customer, get all available save files
+		*			load all save files into select element
+		*			for new customers, load nothing
+		*/
+		function get_saves(customer) {
+			var select_saves = document.getElementById('select_saves')
+			while(count_saves > 0) {
+				select_saves.remove(0)
+				count_saves -= 1
+			}
+			if(customer == null) {
+				count_saves = 0
+				return
+			}
+			count_saves = data[customer].length
+			//var list_saves = []
+			for(var i = 0; i<count_saves; i++) {
+				var timestamp = data[customer][i]['timestamp']
+				var save_name = data[customer][i]['save_name']
+				var option = document.createElement('option')
+				option.text = `${save_name} (${timestamp})`
+				option.value = timestamp
+				select_saves.add(option)
+				/*list_saves.push({
+					'text': `${save_name} (${timestamp})`,
+					'value': Date.parse(timestamp)
+				})*/
+			}
+			/*list_saves.sort(function(a, b) {
+				return b['value'] - a['value']
+			})
+			console.log(list_saves)
+			list_saves.forEach(save => {
+				var option = document.createElement('option')
+				option.text = save['text']
+				option.value = save['value']
+				select_saves.add(option)
+			})*/
+		}
+		function show_save() {
+			document.getElementById('load_save').disabled = false
+		}
+		function new_save() {
+			// get potential customer names
+			var existing_customer = document.getElementById('existing_customer').innerHTML
+			var new_customer = document.getElementById('new_customer').value
+			// set to existing customer if not null, otherwise new customer name
+			var output_customer = document.getElementById('customer')
+			output_customer.value = existing_customer? existing_customer : new_customer
+			// determine timestamp later
+			document.getElementById('timestamp').value = ''
+			// shows that this is a new save file
+			document.getElementById('flag_new').value = 'true'
+		}
+		function existing_save() {
+			var output_customer = document.getElementById('customer')
+			output_customer.value = document.getElementById('existing_customer').innerHTML
+			var output_timestamp = document.getElementById('timestamp')
+			var index = document.getElementById('select_saves').selectedIndex
+			output_timestamp.value = document.getElementById('select_saves')[index].value
+			document.getElementById('flag_new').value = ''
+		}
+	</script>
+</html>

@@ -1,0 +1,378 @@
+<html>
+	<head>
+		<title>Import: Load Input Files</title>
+		<meta name="viewport" content="width=device-width, initial-scale=1">
+
+		<!--<link rel="stylesheet" href="../static/stylesheet/bootstrap.min.css">
+		<link rel="icon" type="image/x-icon" href="../static/favicon.ico">-->
+		<link rel="stylesheet" href="{{url_for('static', filename='css/bootstrap/bootstrap.min.css')}}">
+		<link rel="icon" type="image/x-icon" href="{{url_for('static', filename='favicon.ico')}}">
+
+		<style>
+			h1, h3{
+				text-align: center;
+			}
+			hr {
+				margin-top: 0;
+				margin-bottom: 0;
+				border-bottom: dotted black;
+			}
+			input {
+				width: 100%;
+			}
+			button {
+				width: 100%;
+			}
+			.hidden {
+				display: none;
+			}
+		</style>
+	</head>
+
+	<body>
+		<div class="container">
+			<div class="row">
+				<div class="col-lg-12">
+					<h1>Load Network for {{customer}}</h1>
+					<h3>(last recorded timestamp of configuration set at {{timestamp}})</h3>
+				</div>
+			</div>
+			<hr />
+			<form method="post" action="/{{customer}}/{{timestamp}}/convert-logs" enctype="multipart/form-data">
+				<!--
+					store whether or not this is a new save file
+					determines how files are loaded for post_network_files(customer, timestamp, flag_new)
+				-->
+				<input type="hidden" name="flag_new" id="flag_new" value="{{flag_new}}">
+				
+				<!--
+					Section: 
+						Network Configuration
+					Contents: 
+						customer_name	describes name of customer
+						list_inputLogs	log files from Cisco switches
+						privileged		privileged symbol for processing
+						input_hardware	contains sites, locations, and addresses of switches
+					Function:
+						read log files to determine how layer2 network looks
+				-->
+				<div class="row">
+					<div class="col-md-3">
+						<h5>Network Configuration</h5>
+					</div>
+					<div class="col-md-6">
+						<h5>explains the overall configuration of the network</h5>
+					</div>
+					<div class="col-md-3">
+						<!--TODO-->
+					</div>
+				</div>
+
+				<!--
+					give name for new configurations
+				-->
+				{% if flag_new == "1" %}
+					<div class="row">
+						<div class="col-md-3">
+							<label for="save_name">
+								<strong>Save Name</strong>
+							</label>
+						</div>
+						<div class="col-md-6">
+							<li>case sensitive, saves identified by timestamp</li>
+						</div>
+						<div class="col-md-3">
+							<input type="text" value="" id="save_name" name="save_name">
+						</div>
+					</div>
+					<br />
+				{% endif %}
+
+				<!--
+					input customer log files
+				-->
+				<div class="row">
+					<div class="col-md-3">
+						<label for="input_listLogs">
+							<strong>Input logs for layer2 devices: </strong>
+						</label>
+					</div>
+					<div class="col-md-6">
+						{% if flag_new == "1" %}
+							<li>ensure that files are UTF-8 and end in the *.log extension</li>
+							<li>hostnames are UNIQUE and follow Cisco naming conventions</li>
+							<li>enable and run at least one neighbor discovery protocol (LLDP or CDP)</li>
+							<li>ensure that commands have run with output in PRIVILEGED mode</li>
+							<li>avoid uploading non-layer2 devices (no routers or edge devices)</li>
+							<li>do not clear runtime memory; imports based on normal conditions</li>
+						{% else %}
+							<li>Devices can only be added, not removed or updated</li>
+							<li>Do not upload logs that already exist</li>
+							<li>If a log is found to be a copy, it will be ignored</li>
+							<li>All other new logs will be processed</li>
+							<li>Standard rules for log uploads apply</li>
+						{% endif %}
+					</div>
+					<div class="col-md-3">
+						{% if flag_new == "1" %}
+							<input type="file" id="input_listLogs" name="input_listLogs" multiple="true" required>
+						{% else %}
+							<input type="file" id="input_listLogs" name="input_listLogs" multiple="true">
+						{% endif %}
+					</div>
+				</div>
+				<br />
+				<!--
+					input privileged symbol
+				-->
+				<div class="row">
+					<div class="col-md-3">
+						<label for="privileged">
+							<strong>
+								Input privileged symbol: 
+							</strong>
+						</label>
+					</div>
+					<div class="col-md-6">
+						<li>if left blank, defaults to '#'</li>
+						<li>if set, check that whitespace matches log file contents</li>
+					</div>
+					<div class="col-md-3">
+						<input type="text" value="#" id="privileged" name="privileged">
+					</div>
+				</div>
+				<br />
+				<!--
+					input hardware list
+				-->
+				<div class="row">
+					<div class="col-md-3">
+						<label for="input_hardware">
+							<strong>Input hardware information: </strong>
+						</label>
+					</div>
+					<div class="col-md-6">
+						{% if flag_new == "1" %}
+							<li><strong>Hostname:</strong> name of device (UNIQUE!!!)</li>
+							<li><strong>Site ID:</strong> site in which device resides</li>
+							<li><strong>IP Address:</strong> address of management port</li>
+							<li><strong>Location:</strong> physical location within site</li>
+						{% else %}
+							<li>Hardware can only be added, not updated or deleted</li>
+							<li>Rows pointing to an existing device will be ignored</li>
+							<li>Same rules for hardware files otherwise apply</li>
+						{% endif %}
+					</div>
+					<div class="col-md-3">
+						{% if flag_new == "1" %}
+							<input type="file" id="input_hardware" name="input_hardware" required>
+						{% else %}
+							<input type="file" id="input_hardware" name="input_hardware">
+						{% endif %}
+					</div>
+				</div>
+				<hr />
+				<!--
+					Section: 
+						Provisioning
+					Contents: 
+						it depends
+					Function:
+						load services to determine provisioning
+						1.	for new customer, upload service input only
+						2.	for old customer, upload existing profiles, settings, and services
+				-->
+				<div class="row">
+					<div class="col-md-3">
+						<h5>Determine Provisioning</h5>
+					</div>
+					<div class="col-md-6">
+						<h5 id="provisioning_header">Generate new provisioning</h5>
+					</div>
+					{% if flag_new == "1" %}
+					<div class="col-md-3">
+						<button type="button" id="customer_type" onclick="change_customerType()">toggle provisioning type➜</button>
+					</div>
+					{% endif %}
+				</div>
+
+				<!--
+					import provisioning for new customer
+				-->
+				<div class="" id="new_customer">
+					<div class="row">
+						<div class="col-md-3">
+							<label for="input_service">
+								<strong>Input new vlans and names: </strong>
+							</label>
+						</div>
+						<div class="col-md-6">
+							<li><strong>NAME:</strong> human-readable name</li>
+							<li><strong>VLAN:</strong> integer ID of vlan, </li>
+							<li><strong>IS MANAGEMENT:</strong> access management port</li>
+						</div>
+						<div class="col-md-3">
+							<input type="file" id="input_service" name="input_service">
+						</div>
+					</div>
+				</div>
+
+				<!--
+					import provisioning for existing customer
+				-->
+				<div class="hidden" id="existing_customer">
+					<!--
+						existing services
+					-->
+					<div class="row">
+						<div class="col-md-3">
+							<label for="import_service">
+								<strong>Input existing service import: </strong>
+							</label>
+						</div>
+						<div class="col-md-6">
+							<li>list of services from existing site</li>
+							<li>names are used to recreate profiles and settings</li>
+						</div>
+						<div class="col-md-3">
+							<input type="file" id="import_service" name="import_service">
+						</div>
+					</div>
+					<br />
+
+					<!--
+						existing port settings
+					-->
+					<div class="row">
+						<div class="col-md-3">
+							<label for="import_portSettings">
+								<strong>Input existing port settings: </strong>
+							</label>
+						</div>
+						<div class="col-md-6">
+							<li>port settings from existing site, will use original settings when possible</li>
+						</div>
+						<div class="col-md-3">
+							<input type="file" id="input_portSettings" name="input_portSettings">
+						</div>
+					</div>
+					<br />
+
+					<!--
+						existing port profiles
+					-->
+					<div class="row">
+						<div class="col-md-3">
+							<label for="import_portProfiles">
+								<strong>Input existing port profiles: </strong>
+							</label>
+						</div>
+						<div class="col-md-6">
+							<li>port profiles from existing site, use original profiles when possible</li>
+						</div>
+						<div class="col-md-3">
+							<input type="file" id="input_portProfiles" name="input_portProfiles">
+						</div>
+					</div>
+				</div>
+				<hr />
+				<!--
+					Section: 
+						ToR Election
+					Contents: 
+						tor_count		how many TORs there should be
+						tor_weight		likliehood that layer3 switches are TORs
+					Function:
+						let customer determine which switches to be ToRs
+						all values set to -1 for existing saves
+						don't show if this is an existing save file
+				-->
+				{% if flag_new == "1" %}
+					<div class="row">
+						<div class="col-md-3">
+							<h5>ToR Election</h5>
+						</div>
+						<div class="col-md-6">
+							<h5>Determine Top of Rack switches, done once per save</h5>
+						</div>
+						<div class="col-md-3">
+							<!--TODO-->
+						</div>
+					</div>
+
+					<!--
+						input TORs per site
+					-->
+					<div class="row">
+						<div class="col-md-3">
+							<label for="tor_count">
+								<strong>Input number of ToRs per site: </strong>
+							</label>
+						</div>
+						<div class="col-md-6">
+							<li>each site is drawn as tree/branch, configuration flows down from root</li>
+							<li>switches at root may be aggregated</li>
+						</div>
+						<div class="col-md-3">
+							<input type="number" value="2" min="1" id="tor_count" name="tor_count">
+						</div>
+					</div>
+					<br />
+
+					<!--
+						input layer3 switch weights
+					-->
+					<div class="row">
+						<div class="col-md-3">
+							<label for="tor_weight">
+								<strong>Input weight of layer3 switches: </strong>
+							</label>
+						</div>
+						<div class="col-md-6">
+							<li>ToRs are chosen based on the "mac address-table" (most entries)</li>
+							<li>Switches with routing capabilities are weighted more heavily</li>
+						</div>
+						<div class="col-md-3">
+							<input type="number" value="1.25" id="tor_weight" name="tor_weight" step="0.01" min="1" >
+						</div>
+					</div>
+					<hr />
+				{% endif %}
+				<!--
+					submit form
+				-->
+				<br />
+				<div class="row">
+					<div class="col-md-6">
+						<!--<a href="/">
+							<button type="button">⟸ return</button>
+						</a>-->
+						<button type="button" onclick="location.href='/'">⟸ return</button>
+					</div>
+					<div class="col-md-6">
+						<button type="submit">submit ⟹</button>
+					</div>
+				</div>
+			</form>
+		</div>
+	</body>
+
+	<script>
+		var flag = true;
+		//document.getElementById("customer_type").innerHTML = "new customer (toggle) ➜"
+		function change_customerType() {
+			if(flag == true) {
+				document.getElementById("provisioning_header").innerHTML = "Load existing provisioning"
+				document.getElementById("new_customer").classList.add("hidden")
+				document.getElementById("existing_customer").classList.remove("hidden")
+				flag = false
+			} else {
+				document.getElementById("provisioning_header").innerHTML = "Generate new provisioning"
+				document.getElementById("new_customer").classList.remove("hidden")
+				document.getElementById("existing_customer").classList.add("hidden")
+				flag = true
+			}
+		}
+		
+	</script>
+</html>
