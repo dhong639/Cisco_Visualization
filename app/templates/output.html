@@ -1,0 +1,316 @@
+<html>
+	<head>
+		<title>Output Files for {{customer}}</title>
+
+		<link rel="icon" type="image/x-icon" href="{{url_for('static', filename='favicon.ico')}}">
+		<!--<link rel="icon" type="image/x-icon" href="../static/favicon.ico">-->
+
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, initial-scale=1">
+
+		<link rel="stylesheet" href="{{url_for('static', filename='css/bootstrap/bootstrap.min.css')}}">
+		<!--<link rel="stylesheet" href="../static/stylesheet/bootstrap.min.css">-->
+
+		<style>
+			button {
+				width: 100%;
+			}
+			input {
+				width: 100%
+			}
+			h1 {
+				text-align: center;
+			}
+			h5 {
+				text-align: center;
+			}
+			.left {
+				background-color:LightSteelBlue
+			}
+		</style>
+	</head>
+
+	<body>
+		<div class="container">
+			<div class="row">
+				<div class="col-lg-12">
+					<h1>vNetc Import Files for Customer {{customer}}</h1>
+				</div>
+			</div>
+			<div class="row">
+				<div class="col-lg-12">
+					<h5>download files below (please follow upload order)</h5>
+				</div>
+			</div>
+			<br />
+			<!--
+				download current ns_scan_capture output
+			-->
+			<form method="post" action="/log_import/{{customer}}/output/get_captureOutput">
+				<div class="row">
+					<div class="col-md-2">
+						<label for="get_captureOutput">
+							<b>0. capture output</b>
+							<p>(optional)</p>
+						</label>
+					</div>
+					<div class="col-md-8">
+						<li>json description of the Black Box configuration</li>
+						<li>capture-devices.json describes overall device configuration</li>
+						<li>port-profiles.json describes services (VLANs) on ports</li>
+						<li>port-settings.json describes configuration of ports</li>
+						<li>please keep the profiles and settings files for future imports</li>
+					</div>
+					<div class="col-md-2">
+						<button type="submit" id="get_captureOutput">download</button>
+					</div>
+				</div>
+			</form>
+			<!--
+				download service import
+			-->
+			<form method="post" action="/log_import/{{customer}}/output/get_service_import">
+				<div class="row">
+					<div class="col-md-2">
+						<label for="get_service_import">
+							<b>1. Service Import</b>
+						</label>
+					</div>
+					<div class="col-md-8">
+						<li>maps vlan IDs, names, and sites</li>
+						<li>notes management VLANs</li>
+					</div>
+					<div class="col-md-2">
+						<button type="submit" id="get_service_import">download</button>
+					</div>
+				</div>
+			</form>
+			<hr />
+			<!--
+				download site import
+			-->
+			<form method="post" action="/log_import/{{customer}}/output/get_site_import">
+				<div class="row">
+					<div class="col-md-2">
+						<label for="get_site_import">
+							<b>2. Site Import</b>
+						</label>
+					</div>
+					<div class="col-md-8">
+						<li>lists what switches are top-of-rack for given sites</li>
+						<li>notes management VLAN for site</li>
+						<li>lists aggregated links in site</li>
+					</div>
+					<div class="col-md-2">
+						<button type="submit" id="get_site_import">download</button>
+					</div>
+				</div>
+			</form>
+			<hr />
+			<!--
+				download service port import
+			-->
+			<form method="post" action="/log_import/{{customer}}/output/get_servicePort_import">
+				<div class="row">
+					<div class="col-md-2">
+						<label for="get_servicePort_import">
+							<b>3. Service Port Import</b>
+						</label>
+					</div>
+					<div class="col-md-8">
+						<li>lists every port profile that isn't an eth_port</li>
+						<li>crosslinks are used to enforce tree/branch model</li>
+						<li>layer3 links are links with "no switchport" configuration</li>
+						<li>service up/downlinks are links to outside network via non-fabric layer3 device</li>
+						<li>lists relevant services associated with profile</li>
+					</div>
+					<div class="col-md-2">
+						<button type="submit" id="get_servicePort_import">download</button>
+					</div>
+				</div>
+			</form>
+			<hr />
+			<!--
+				download eth port import
+			-->
+			<form method="post" action="/log_import/{{customer}}/output/get_ethPort_import">
+				<div class="row">
+					<div class="col-md-2">
+						<label for="get_ethPort_import">
+							<b>4. Eth Port Import</b>
+						</label>
+					</div>
+					<div class="col-md-8">
+						<li>lists every eth_port port profile</li>
+						<li>eth_ports are links to edge devices with at least an access vlan</li>
+						<li>lists relevant services associated with profile</li>
+					</div>
+					<div class="col-md-2">
+						<button type="submit" id="get_ethPort_import">download</button>
+					</div>
+				</div>
+			</form>
+			<hr />
+			<!--
+				download port settings import
+			-->
+			<form method="post" action="/log_import/{{customer}}/output/get_portSettings_import">
+				<div class="row">
+					<div class="col-md-2">
+						<label for="get_portSettings_import">
+							<b>5. Port Settings Import</b>
+						</label>
+					</div>
+					<div class="col-md-8">
+						<li>lists every port setting profile</li>
+						<li>describes how a given port is configured</li>
+						<li>is mostly not concerned with services</li>
+					</div>
+					<div class="col-md-2">
+						<button type="submit" id="get_portSettings_import">download</button>
+					</div>
+				</div>
+			</form>
+			<hr />
+			<!--
+				download switch endpoints import
+			-->
+			<form method="post" action="/log_import/{{customer}}/output/get_endpoints_import">
+				<div class="row">
+					<div class="col-md-2">
+						<label for="get_endpoints_import">
+							<b>6. Endpoints Import</b>
+						</label>
+					</div>
+					<div class="col-md-8">
+						<li>creates endpoint object for fabric switch</li>
+						<li>describes parent switch (path from current switch to ToR)</li>
+						<li>provides labels for ports</li>
+					</div>
+					<div class="col-md-2">
+						<button type="submit" id="get_endpoints_import">download</button>
+					</div>
+				</div>
+			</form>
+			<hr />
+			<!--
+				download switch endpoints import
+			-->
+			<form method="post" action="/log_import/{{customer}}/output/get_lags_import">
+				<div class="row">
+					<div class="col-md-2">
+						<label for="get_lags_import">
+							<b>7. LAGs Import</b>
+						</label>
+					</div>
+					<div class="col-md-8">
+						<li>creates lag objects</li>
+						<li>note port profile and setting on lag</li>
+					</div>
+					<div class="col-md-2">
+						<button type="submit" id="get_lags_import">download</button>
+					</div>
+				</div>
+			</form>
+			<hr />
+			<!--
+				download switch endpoints import
+			-->
+			<form method="post" action="/log_import/{{customer}}/output/get_deviceSettings_import">
+				<div class="row">
+					<div class="col-md-2">
+						<label for="get_deviceSettings_import">
+							<b>8. Device Settings Import</b>
+						</label>
+					</div>
+					<div class="col-md-8">
+						<li>creates device settings</li>
+						<li>adjusts power-over-ethernet</li>
+					</div>
+					<div class="col-md-2">
+						<button type="submit" id="get_deviceSettings_import">download</button>
+					</div>
+				</div>
+			</form>
+			<hr />
+			<!--
+				download switch endpoints import
+			-->
+			<form method="post" action="/log_import/{{customer}}/output/get_bundles_import">
+				<div class="row">
+					<div class="col-md-2">
+						<label for="get_bundles_import">
+							<b>9. Bundles Import</b>
+						</label>
+					</div>
+					<div class="col-md-8">
+						<li>creates bundle for endpoint</li>
+						<li>applies device setting to switch</li>
+						<li>set a port profile and setting for each port, if applicable</li>
+					</div>
+					<div class="col-md-2">
+						<button type="submit" id="get_bundles_import">download</button>
+					</div>
+				</div>
+			</form>
+			<hr />
+			<!--
+				download switch endpoints import
+			-->
+			<form method="post" action="/log_import/{{customer}}/output/get_controllers_import">
+				<div class="row">
+					<div class="col-md-2">
+						<label for="get_controllers_import">
+							<b>10. Controllers Import</b>
+						</label>
+					</div>
+					<div class="col-md-8">
+						<div class="row">
+							<div class="col-sm-3">
+								<label for="sdlc">input controller name: </label>
+							</div>
+							<div class="col-sm-3">
+								<input type="text" name="sdlc" id="sdlc" required>
+							</div>
+							<div class="col-sm-6">
+								<p>(required) name of controller managing devices</p>
+							</div>
+						</div>
+						<div class="row">
+							<div class="col-sm-3">
+								<label for="ssh_username">input ssh username: </label>
+							</div>
+							<div class="col-sm-3">
+								<input type="text" name="ssh_username" id="ssh_username">
+							</div>
+							<div class="col-sm-6">
+								<p>(recommended) used for debugging purposes</p>
+							</div>
+						</div>
+						<div class="row">
+							<div class="col-sm-3">
+								<label for="ssh_password">input ssh password: </label>
+							</div>
+							<div class="col-sm-3">
+								<input type="password" name="ssh_password" id="ssh_password">
+							</div>
+							<div class="col-sm-6">
+								<p>(recommended) used for debugging purposes</p>
+							</div>
+						</div>
+					</div>
+					<div class="col-md-2">
+						<button type="submit" id="get_controllers_import">download</button>
+					</div>
+				</div>
+			</form>
+			<hr />
+			<div class="row">
+				<div class="col-md-12">
+					<button onclick="location.href='/login';">⟸ Return to login</button>
+				</div>
+			</div>
+			<br />
+		</div>
+	</body>
+</html>
