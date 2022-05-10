@@ -2,7 +2,9 @@
 <html>
 	<head>
 		<title>Topology Preview</title>
-		<!--<title>{{customer}} Topology Preview</title>-->
+		<!--
+			<title>{{customer}} Topology Preview</title>
+		-->
 		<meta charset="utf-8">
 		<meta name="viewport" content="width=device-width, initial-scale=1">
 
@@ -10,9 +12,14 @@
 			set stylesheets
 		-->
 		<link rel="stylesheet" href="{{url_for('static', filename='css/bootstrap/bootstrap.min.css')}}">
+		<!--
+			<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.3.1/dist/css/bootstrap.min.css" integrity="sha384-ggOyR0iXCbMQv3Xipma34MD+dH/1fQ784/j6cY/iJTQUOhcWr7x9JvoRxT2MZw1T" crossorigin="anonymous">
+		-->
 		<link rel="stylesheet" href="{{url_for('static', filename='css/stylesheet.css')}}">
-		<!--<link rel="stylesheet" href="static/css/bootstrap/bootstrap.min.css">
-		<link rel="stylesheet" href="static/css/stylesheet.css">-->
+		<!--
+			<link rel="stylesheet" href="static/css/bootstrap/bootstrap.min.css">
+			<link rel="stylesheet" href="static/css/stylesheet.css">
+		-->
 
 		<!--
 			load cytoscape graph functions
@@ -21,10 +28,18 @@
 		<script type="text/javascript" src="{{url_for('static', filename='javascript/api/cytoscape/layout-base.js')}}"></script>
 		<script type="text/javascript" src="{{url_for('static', filename='javascript/api/cytoscape/cose-base.js')}}"></script>
 		<script type="text/javascript" src="{{url_for('static', filename='javascript/api/cytoscape/cytoscape-fcose.js')}}"></script>
-		<!--<script type="text/javascript" src="static/javascript/api/cytoscape/cytoscape.min.js"></script>
-		<script type="text/javascript" src="static/javascript/api/cytoscape/layout-base.js"></script>
-		<script type="text/javascript" src="static/javascript/api/cytoscape/cose-base.js"></script>
-		<script type="text/javascript" src="static/javascript/api/cytoscape/cytoscape-fcose.js"></script>-->
+		<!--
+			<script type="text/javascript" src="static/javascript/api/cytoscape/cytoscape.min.js"></script>
+			<script type="text/javascript" src="static/javascript/api/cytoscape/layout-base.js"></script>
+			<script type="text/javascript" src="static/javascript/api/cytoscape/cose-base.js"></script>
+			<script type="text/javascript" src="static/javascript/api/cytoscape/cytoscape-fcose.js"></script>
+		-->
+		<!--
+			<script src="https://unpkg.com/cytoscape/dist/cytoscape.min.js"></script>
+			<script src="https://unpkg.com/layout-base/layout-base.js"></script>
+			<script src="https://unpkg.com/cose-base/cose-base.js"></script>
+			<script src="https://unpkg.com/cytoscape-fcose/cytoscape-fcose.js"></script>
+		-->
 
 		<!--
 			load resources to generate graph
@@ -36,11 +51,13 @@
 		<script type="text/javascript" src="{{url_for('static', filename='javascript/current_preview/graph_other.js')}}"></script>
 		<script type="text/javascript" src="{{url_for('static', filename='javascript/current_preview/details.js')}}"></script>
 		
-		<!--<script type="text/javascript" src="static/javascript/current_preview/device.js"></script>
-		<script type="text/javascript" src="static/javascript/current_preview/interface.js"></script>
-		<script type="text/javascript" src="static/javascript/current_preview/graph_fabric.js"></script>
-		<script type="text/javascript" src="static/javascript/current_preview/graph_other.js"></script>
-		<script type="text/javascript" src="static/javascript/current_preview/details.js"></script>-->
+		<!--
+			<script type="text/javascript" src="static/javascript/current_preview/device.js"></script>
+			<script type="text/javascript" src="static/javascript/current_preview/interface.js"></script>
+			<script type="text/javascript" src="static/javascript/current_preview/graph_fabric.js"></script>
+			<script type="text/javascript" src="static/javascript/current_preview/graph_other.js"></script>
+			<script type="text/javascript" src="static/javascript/current_preview/details.js"></script>
+		-->
 
 		<!--
 			load all other javascript functions
@@ -49,15 +66,19 @@
 		<script type="text/javascript" src="{{url_for('static', filename='javascript/api/edit_options.js')}}"></script>
 		<script type="text/javascript" src="{{url_for('static', filename='javascript/api/load_graph.js')}}"></script>
 		<script type="text/javascript" src="{{url_for('static', filename='javascript/api/Graph.js')}}"></script>
-		<!--<script type="text/javascript" src="static/javascript/api/loadDropdown.js"></script>
-		<script type="text/javascript" src="static/javascript/api/edit_options.js"></script>
-		<script type="text/javascript" src="static/javascript/api/load_graph.js"></script>
-		<script type="text/javascript" src="static/javascript/api/Graph.js"></script>-->
+		<!--
+			<script type="text/javascript" src="static/javascript/api/loadDropdown.js"></script>
+			<script type="text/javascript" src="static/javascript/api/edit_options.js"></script>
+			<script type="text/javascript" src="static/javascript/api/load_graph.js"></script>
+			<script type="text/javascript" src="static/javascript/api/Graph.js"></script>
+		-->
 
 		<!--
 			load favicon image to look official
 		-->
-		<!--<link rel="icon" type="image/x-icon" href="static/favicon.ico">-->
+		<!--
+			<link rel="icon" type="image/x-icon" href="static/favicon.ico">
+		-->
 		<link rel="icon" type="image/x-icon" href="{{url_for('static', filename='favicon.ico')}}">
 
 		<style>
