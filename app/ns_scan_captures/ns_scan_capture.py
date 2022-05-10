@@ -2,11 +2,13 @@ import os
 import csv
 import json
 from .ScannerDevice import ScannerDevice
+from .ScannerNeighbor import ScannerNeighbor
 from .Graph import Graph
-from paths import PATH_CUSTOMER_SAVE_HARDWARE
 from paths import PATH_CUSTOMER_LOGS
 from paths import PATH_CUSTOMER_PRESCAN
 from paths import PATH_CUSTOMER_SAVE_DETAILS
+from paths import PATH_CUSTOMER_SAVE_SERVICE
+from paths import PATH_CUSTOMER_PRIMARY
 
 
 def get_dict_device(sections):
@@ -47,7 +49,6 @@ def set_intf_portType(device_id, intf_id, type_, capture_devices):
 	interface = capture_devices[device_id]['ivn_port'][intf_id]
 	if 'port_type' not in interface or interface['port_type'] == 'fabric':
 		capture_devices[device_id]['ivn_port'][intf_id]['port_type'] = type_
-	#capture_devices[device_id]['ivn_port'][intf_id]['port_type'] = type_
 
 # set_intf_portType
 #		input:
@@ -120,10 +121,13 @@ def prescan(customer, timestamp, tor_count, tor_weight):
 				# 'list_node' denotes all other devices, define later
 				# 'list_all' is all fabric devices, define now, used to determine tors and nodes
 				dict_site2device[site_id] = {
-					'list_router': [],
 					'list_tor': [],
 					'list_node': [],
-					'list_all': []
+					'list_all': [],
+					'list_unmanaged': {
+						'router': [],
+						'other': []
+					}
 				}
 			# get total number of vlans found in 'show mac address-table'
 			# for layer 3 switches, multiply the number by a given weight
@@ -133,20 +137,21 @@ def prescan(customer, timestamp, tor_count, tor_weight):
 
 			# if no VLANs have been found, treat the device as a router
 			if count_vlanTotal == 0:
-				dict_site2device[site_id]['list_router'].append(device_id)
+				#dict_site2device[site_id]['list_router'].append(device_id)
+				dict_site2device[site_id]['list_unmanaged']['router'].append(device_id)
 			# otherwise, the device is either a ToR or a fabric switch
 			else:
 				dict_site2device[site_id]['list_all'].append({
 					'hostname': device_id,
 					'count_vlan': count_vlanTotal
 				})
-			
+
 			if site_id not in dict_devices:
 				dict_devices[site_id] = {}
 			dict_devices[site_id][device_id] = scannerDevice.get_dictPreview_device()
 			dict_interfaces[device_id] = scannerDevice.get_dictPreview_interface()
 			dict_neighbors[device_id] = get_dict_neighbor(sections)
-	
+
 	# determine ToRs and fabric devices from 'list_all'
 	#		by default, ToRs are the two devices with the most mac address-table entries
 	#			layer 3 switches are preferred and given higher weights
@@ -163,30 +168,28 @@ def prescan(customer, timestamp, tor_count, tor_weight):
 		list_ = sorted(list_, key=lambda i: (i['count_vlan'], i['hostname']))
 		# last elements in list are the TORs, set 'is_tor' on those devices to True
 		dict_site2device[site_id]['list_tor'] = [item['hostname'] for item in list_[-length:]]
-		#print(dict_site2device[site_id]['list_tor'])
 		for device_id in dict_site2device[site_id]['list_tor']:
 			dict_devices[site_id][device_id]['is_tor'] = True
 		# every thing before the TOR devices in 'list_node' are normal devices
 		dict_site2device[site_id]['list_node'] = [item['hostname'] for item in list_[:-length]]
 		# remove 'list_all' for readability
 		del dict_site2device[site_id]['list_all']
-	
+
 	# process neighbor information and create topology
-	graph = Graph(dict_site2device, dict_neighbors)
+	scannerNeighbor = ScannerNeighbor(dict_site2device, dict_neighbors)
 	# remove redundant links if possible
-	graph.clean_edges()
-	print(json.dumps(graph.get_weights(), indent=4))
+	scannerNeighbor.clean_edges()
 
 	# links within network
 	#		'sourceID' denotes source device
 	#			'targetID' denotes target device
 	#				'capability' denotes type of device (switch, router, etc.)
 	#			'pairs' denotes source/target interface pairs
-	dict_edgeFabric = graph.get_edgesFabric()
+	dict_edgeFabric = scannerNeighbor.get_edgesFabric()
 	# links to outside network
 	#		layer3		link to some router that allows for internet access
 	#		eth_port	link to some edge device that isn't a router
-	dict_edgesOther = graph.get_edgesOther()
+	dict_edgesOther = scannerNeighbor.get_edgesOther()
 
 	# write results to static javascript resources
 	with open(os.path.join(output_prescan, 'device.json'), 'w') as file:
@@ -199,32 +202,30 @@ def prescan(customer, timestamp, tor_count, tor_weight):
 		json.dump(dict_edgesOther, file, indent=4)
 
 
-"""def primary_scan(customer, privileged, set_tor, set_router, set_gatewaySite, is_debug=False):
-	# determine if site_id is included in services-import.csv
-	# affects how port profiles and settings are counted
-	is_service_bySite = False
-	with open(os.path.join(PATH_INPUT.format(customer), 'service-import.csv'), 'r') as file:
-		reader = csv.reader(file)
-		header = [item.lower().replace(' ', '_') for item in next(reader)]
-		if 'site_id' in header:
-			is_service_bySite = True
+def primary_scan(customer, timestamp):
+	# items below are used for device-to-site mapping
+	set_tor = set()
+	set_unmanaged = set()
+	set_siteGateway = set()
+	with open(PATH_CUSTOMER_SAVE_DETAILS.format(customer, timestamp), 'r') as file:
+		dict_details = json.load(file)
+		set_tor = set(dict_details['list_tor'])
+		set_unmanaged = set(dict_details['list_unmanaged'])
+		set_siteGateway = set(dict_details['list_site_gateway'])
+	
+	# items below are used for topology information
+	path_prescan = PATH_CUSTOMER_PRESCAN.format(customer, timestamp)
+	dict_edgeFabric = {}
+	path_graph_fabric = os.path.join(path_prescan, 'graph_fabric.json')
+	with open(path_graph_fabric, 'r') as file:
+		dict_edgeFabric = json.load(file)
+	dict_edgeOther = {}
+	path_graph_other = os.path.join(path_prescan, 'graph_other.json')
+	with open(path_graph_other, 'r') as file:
+		dict_edgeOther = json.load(file)
 
 	# store complete device information
 	capture_devices = {}
-
-	# lldp and cdp sections from input logs
-	dict_neighbors = {}
-
-	# see if logs were properly processed
-	dict_sections = {}
-
-	# total list of all file names
-	input_logs = 'customers/{}/input/logs'.format(customer)
-	list_files = sorted(os.listdir(input_logs))
-
-	# physical location information for devices
-	input_hardware = 'customers/{}/input/hardware-list.csv'.format(customer)
-	list_hardware = format_hardware(input_hardware)
 
 	# categorize device hostnames based on site id
 	# further categorize into subcategories:
@@ -232,91 +233,76 @@ def prescan(customer, timestamp, tor_count, tor_weight):
 	#		tor, most vlans in mac address table
 	#		nodes, all other devices
 	dict_site2device = {}
+	set_site = set()
+	count = 0
 
-	# output location of capture-devices.json, provisioning_state.json, and the import csv files
-	output_customer = 'customers/{}/output'.format(customer)
-	
+	dir_files = PATH_CUSTOMER_LOGS.format(customer, timestamp)
+	list_files = os.listdir(dir_files)
 	for filename in list_files:
-		with open(input_logs + '/' + filename) as file:
-			# convert file contents into sections
-			sections = Sections(file, privileged)
-			# get device_id as hostname of device
-			#		must be done first to set identify hardware information
-			device_id = sections.get_deviceID()
-			hardware = None
-			for row in list_hardware:
-				if row['hostname'].lower() == device_id.lower():
-					hardware = row
-					break
-			# scan device for necessary configuration details
-			scannerDevice = ScannerDevice(sections.get_dict_device(), hardware)
-			# use site_id to key information for dict_site2device
-			site_id = scannerDevice.get_siteID()
+		sections = {}
+		device_id = None
+		site_id = None
+		with open(os.path.join(dir_files, filename), 'r') as file:
+			sections = json.load(file)
+			device_id = sections['device_id']
+			site_id = sections['site_id']
+			if site_id not in set_siteGateway:
+				set_site.add(site_id)
 			if site_id not in dict_site2device:
-				# 'list_router' denotes all devices that never encountered VLANs, define now
-				# 'list_tor' denotes devices that encountered the most VLANs, define later
-				# 'list_node' denotes all other devices, define later
-				# 'list_all' is all fabric devices, define now, used to determine tors and nodes
+				# all devices in this section have been defined earlier
+				# fill in the fields as they are encountered
 				dict_site2device[site_id] = {
-					'list_router': [],
 					'list_tor': [],
 					'list_node': [],
+					'list_unmanaged': {
+						'router': [],
+						'other': []
+					}
 				}
-			# determine what kind of device the given node is
-			#		since prescan has been done, the role of each device is known
-			#		check if device id is in respective set, then append and set field
+			scanner_device = ScannerDevice(sections)
+			# overwrite TOR status with preview results
+			scanner_device.set_isTOR(device_id in set_tor)
 			if device_id in set_tor:
+				scanner_device.set_isTOR(True)
 				dict_site2device[site_id]['list_tor'].append(device_id)
-				scannerDevice.set_isTOR()
-			elif device_id in set_router:
-				dict_site2device[site_id]['list_router'].append(device_id)
-				scannerDevice.set_isRouter()
-			else:
+			# overwrite is_managed with preview results, depends on layer3 capabilities
+			scanner_device.set_isManaged(device_id not in set_unmanaged)
+			if device_id in set_unmanaged:
+				if scanner_device.get_layer3() == True:
+					dict_site2device[site_id]['list_unmanaged']['router'].append(device_id)
+				else:
+					dict_site2device[site_id]['list_unmanaged']['other'].append(device_id)
+			if device_id not in set_tor and device_id not in set_unmanaged:
 				dict_site2device[site_id]['list_node'].append(device_id)
-			# still need neighbor information to get link information later on
-			dict_neighbors[device_id] = sections.get_dict_neighbor()
-			# debug if needed
-			if is_debug == True:
-				dict_sections[device_id] = sections.get_dict_all()
-			# store complete device information
-			if device_id not in set_router:
-				capture_devices[device_id] = scannerDevice.get_dict()
+			if device_id not in set_unmanaged:
+				count += 1
+				capture_devices[device_id] = scanner_device.get_dict()
 
-	# create Graph
-	graph = Graph(dict_site2device, dict_neighbors)
-	dict_edgesFabric = graph.get_edgesFabric()
-	dict_edgesOther = graph.get_edgesOther()
-	list_path_gatewaySite = []
-	for source_site in dict_site2device:
-		if source_site not in set_gatewaySite:
-			shortest_path = []
-			length = float('inf')
-			for target_site in set_gatewaySite:
-				path = graph.get_path_site2site(source_site, target_site)
-				if len(path) < length:
-					shortest_path = path
-			list_path_gatewaySite.append(shortest_path)
-	
-	#for path in list_path_gatewaySite:
-	#	print(path)
+	# create graph
+	graph = Graph(count, set_siteGateway, dict_site2device, dict_edgeFabric, dict_edgeOther)
 
-	# print debug if needed
-	if is_debug == True:
-		with open(output_customer + '/map.json', 'w') as file:
-			json.dump(dict_edgesFabric, file, indent=4)
-		with open(output_customer + '/edges_other.json', 'w') as file:
-			json.dump(dict_edgesOther, file, indent=4)
-		with open(output_customer + '/site2device.json', 'w') as file:
-			json.dump(dict_site2device, file, indent=4)
-
-	# based on path to TOR, set parent of node
+	# set parent nodes
+	# in regards to path from node to ToR
 	for device_id in capture_devices:
-		if capture_devices[device_id]['is_tor'] != True:
-			path = graph.get_path_node2TOR(device_id)
-			if path != None:
-				capture_devices[device_id]['expected_parent_id'] = path[1]
-				list_intfPair = graph.get_list_intfPair(device_id, path[1])
-				capture_devices[device_id]['expected_parent_intf'] = list_intfPair
+		if capture_devices[device_id]['is_tor'] == False:
+			site_id = capture_devices[device_id]['site_id']
+			path = graph.path_toTOR(site_id, device_id)
+			if path != None and len(path) >= 2:
+				source_id = path[0]
+				target_id = path[1]
+				list_pairs = graph.get_pairs_fabric(source_id, target_id)
+				capture_devices[device_id]['expected_parent_id'] = target_id
+				capture_devices[device_id]['expected_parent_intf'] = list_pairs
+			#print(graph.path_toTOR(site_id, device_id))
+
+	# determine paths from noRoute to gateway sites
+	list_path_gatewaySite = []
+	for site_id in set_site:
+		#path = graph.path_toGateway(site_id)
+		#list_path_gatewaySite.append(path)
+		list_path_gatewaySite.append(graph.path_toGateway(site_id))
+		#print(site_id)
+		#print(path)
 
 	##############################################################################
 	# set port types
@@ -332,23 +318,23 @@ def prescan(customer, timestamp, tor_count, tor_weight):
 	##############################################################################
 
 	# set fabric ports
-	for sourceID in dict_edgesFabric:
-		for targetID in dict_edgesFabric[sourceID]:
-			list_intfPair = graph.get_list_intfPair(sourceID, targetID)
+	for sourceID in dict_edgeFabric:
+		for targetID in dict_edgeFabric[sourceID]:
+			list_intfPair = graph.get_pairs_fabric(sourceID, targetID)
 			# note that links are bidirectional
 			# for link target to source, will set port types again, but nothing will change
-			for pair in list_intfPair:
-				if pair[0] != None:
-					set_intf_portType(sourceID, pair[0], 'fabric', capture_devices)
-				if targetID in capture_devices and pair[1] != None:
-					set_intf_portType(targetID, pair[1], 'fabric', capture_devices)
+			if list_intfPair != None:
+				for pair in list_intfPair:
+					if pair[0] != None:
+						set_intf_portType(sourceID, pair[0], 'fabric', capture_devices)
+					if targetID in capture_devices and pair[1] != None:
+						set_intf_portType(targetID, pair[1], 'fabric', capture_devices)
 
 	# set crosslinks for lags
 	#		check if there is a direct link between two ToRs
 	#		if there is, set all interface pairs between the two to 'crosslink'
-	dict_tor = graph.get_tor()
-	for site_id in dict_tor:
-		list_tor = list(dict_tor[site_id])
+	for site_id in dict_site2device:
+		list_tor = dict_site2device[site_id]['list_tor']
 		length = len(list_tor)
 		for i in range(length):
 			tor_i = list_tor[i]
@@ -356,7 +342,7 @@ def prescan(customer, timestamp, tor_count, tor_weight):
 			for j in range(i+1, length):
 				tor_j = list_tor[j]
 				# if tors have no direct link, no port_types are set
-				list_intfPair = graph.get_list_intfPair(tor_i, tor_j)
+				list_intfPair = graph.get_pairs_fabric(tor_i, tor_j)
 				# note that the graph has not been cleaned
 				#		represents more accurate view of graph
 				#		some pairs will contain None instead of interface names
@@ -365,7 +351,7 @@ def prescan(customer, timestamp, tor_count, tor_weight):
 						set_intf_portType(tor_i, pair[0], 'crosslink', capture_devices)
 					if pair[1] != None:
 						set_intf_portType(tor_j, pair[1], 'crosslink', capture_devices)
-	
+
 	# set service ports for paths to gateway site(s)
 	for path in list_path_gatewaySite:
 		# note that paths are not bidirectional
@@ -374,17 +360,17 @@ def prescan(customer, timestamp, tor_count, tor_weight):
 		for i in range(len(path) - 1):
 			source_id = path[i]
 			target_id = path[i+1]
-			list_intfPair = graph.get_list_intfPair(source_id, target_id)
+			list_intfPair = graph.get_pairs_fabric(source_id, target_id)
 			for pair in list_intfPair:
 				# set source port type
 				if pair[0] != None:
-					if(count_vlan(source_id, pair[0], capture_devices) > 0):
+					if count_vlan(source_id, pair[0], capture_devices) > 0:
 						set_intf_portType(source_id, pair[0], 'service_up', capture_devices)
 					else:
 						set_intf_portType(source_id, pair[0], 'layer3', capture_devices)
 				# set target port type
 				if pair[1] != None:
-					if(count_vlan(target_id, pair[1], capture_devices) > 0):
+					if count_vlan(target_id, pair[1], capture_devices) > 0:
 						set_intf_portType(target_id, pair[1], 'service_down', capture_devices)
 					else:
 						set_intf_portType(target_id, pair[1], 'layer3', capture_devices)
@@ -395,16 +381,20 @@ def prescan(customer, timestamp, tor_count, tor_weight):
 	# set eth ports
 	#		if neighbor information reports connection to non-layer3 and access_vlan exists,
 	#			set as eth_port
-	for device_id in dict_edgesOther:
-		for intf in dict_edgesOther[device_id]['layer3']:
-			if count_vlan(device_id, intf, capture_devices) == 0:
-				set_intf_portType(device_id, intf, 'layer3', capture_devices)
-			else:
-				set_intf_portType(device_id, intf, 'service_up', capture_devices)
-		for intf in dict_edgesOther[device_id]['eth_port']:
-			access_vlan = capture_devices[device_id]['ivn_port'][intf]['access_vlan']
-			if access_vlan != None:
-				set_intf_portType(device_id, intf, 'eth_port', capture_devices)
+	for device_id in dict_edgeOther:
+		list_intf_eth = graph.get_intf_eth(device_id)
+		if list_intf_eth != None:
+			for intf in list_intf_eth:
+				access_vlan = capture_devices[device_id]['ivn_port'][intf]['access_vlan']
+				if access_vlan != None:
+					set_intf_portType(device_id, intf, 'eth_port', capture_devices)
+		list_intf_layer3 = graph.get_intf_layer3(device_id)
+		if list_intf_layer3:
+			for intf in list_intf_layer3:
+				if count_vlan(device_id, intf, capture_devices) == 0:
+					set_intf_portType(device_id, intf, 'layer3', capture_devices)
+				else:
+					set_intf_portType(device_id, intf, 'service_up', capture_devices)
 
 	# set eth_ports not reported by neighbor discovery
 	#		access vlan must exist
@@ -417,12 +407,21 @@ def prescan(customer, timestamp, tor_count, tor_weight):
 			if access_vlan != None and connected == True and 'port_type' not in port:
 				set_intf_portType(device_id, port_id, 'eth_port', capture_devices)
 
+	# if vlans are not unique per site, then vlans are applied everywhere
+	# in this situation, the site_id is always considered "GLOBAL"
+	dict_services = {}
+	is_service_bySite = True
+	with open(PATH_CUSTOMER_SAVE_SERVICE.format(customer, timestamp), 'r') as file:
+		dict_services = json.load(file)
+		if set(dict_services.keys()) == set(['GLOBAL']):
+			is_service_bySite = False
+
 	# define port settings
 	list_portSetting = []
 	for device_id in capture_devices:
 		site_id = capture_devices[device_id]['site_id']
 		if is_service_bySite == False:
-			site_id = None
+			site_id = 'GLOBAL'
 		for port_id in capture_devices[device_id]['ivn_port']:
 			port = capture_devices[device_id]['ivn_port'][port_id]
 			voice_pair = None
@@ -460,9 +459,10 @@ def prescan(customer, timestamp, tor_count, tor_weight):
 			port = capture_devices[device_id]['ivn_port'][port_id]
 			if 'port_type' in port and port['port_type'] != 'fabric':
 				site_id = capture_devices[device_id]['site_id']
-				site_id = site_id if port['port_type'] != 'layer3' else None
 				if is_service_bySite == False:
-					site_id = None
+					site_id = 'GLOBAL'
+				# layer3 links have no vlans, no reason to keep track of vlan site
+				site_id = site_id if port['port_type'] != 'layer3' else None
 				profile = {
 					"site_id": site_id, 
 					"port_type": port["port_type"], 
@@ -479,14 +479,14 @@ def prescan(customer, timestamp, tor_count, tor_weight):
 	for i in range(len(list_portProfile)):
 		list_portProfile[i]['port_profile_id'] = i + 1
 		list_portProfile[i]['port_profile_name'] = None
-
+	
+	path_primary = PATH_CUSTOMER_PRIMARY.format(customer, timestamp)
 	# output device information to file
-	with open(output_customer + '/capture-devices.json', 'w') as file:
+	with open(os.path.join(path_primary, 'capture-devices.json'), 'w') as file:
 		json.dump(capture_devices, file, indent=4)
 	# output port settings to file
-	with open(output_customer + '/port-settings.json', 'w') as file:
+	with open(os.path.join(path_primary, 'port-settings.json'), 'w') as file:
 		json.dump(list_portSetting, file, indent=4)
 	# output port profiles to file
-	with open(output_customer + '/port-profiles.json', 'w') as file:
+	with open(os.path.join(path_primary, 'port-profiles.json'), 'w') as file:
 		json.dump(list_portProfile, file, indent=4)
-"""
