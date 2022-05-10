@@ -17,6 +17,7 @@ from paths import PATH_CUSTOMER_PRIMARY
 from paths import PATH_CURRENT_PREVIEW
 from .ns_scan_captures import Sections
 from .ns_scan_captures import prescan
+from .ns_scan_captures import primary_scan
 
 
 @app.route('/', methods=['GET'])
@@ -339,29 +340,23 @@ def save_topology_edits(customer, timestamp, flag):
 		if flag == 2:
 			return
 
+		# regardless of what happens, write the results to details.json
 		dict_details = {}
 		with open(PATH_CUSTOMER_SAVE_DETAILS.format(customer, timestamp), 'r') as file:
 			dict_details = json.load(file)
-
-		if request.form['list_tor']:
-			dict_details['list_tor'] = request.form['list_tor'].split('|')
-		else:
-			dict_details['list_tor'] = []
-		if request.form['list_unmanaged']:
-			dict_details['list_unmanaged'] = request.form['list_unmanaged'].split('|')
-		else:
-			dict_details['list_unmanaged'] = []
-		if request.form['list_site_gateway']:
-			dict_details['list_site_gateway'] = request.form['list_site_gateway'].split('|')
-		else:
-			dict_details['list_site_gateway'] = []
-		if request.form['list_site_ignored']:
-			dict_details['list_site_ignored'] = request.form['list_site_ignored'].split('|')
-		else:
-			dict_details['list_site_ignored'] = []
+		for key in ['list_tor', 'list_unmanaged', 'list_site_gateway', 'list_site_ignored']:
+			if request.form[key]:
+				dict_details[key] = request.form[key].split('|')
+			else:
+				dict_details[key] = []
 		with open(PATH_CUSTOMER_SAVE_DETAILS.format(customer, timestamp), 'w') as file:
 			json.dump(dict_details, file, indent=4)
 		if flag:
 			return redirect(url_for('get_login'))
 		else:
-			return
+			primary_scan(customer, timestamp)
+			return redirect(url_for('get_output', customer=customer, timestamp=timestamp))
+
+@app.route('/<customer>/<timestamp>/output', methods=['GET'])
+def get_output(customer, timestamp):
+	return render_template('output.html', customer=customer, timestamp=timestamp)
