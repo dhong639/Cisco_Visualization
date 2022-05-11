@@ -28,7 +28,6 @@ def redirect_login():
 @app.route('/login', methods=['GET'])
 def get_login():
 	dict_saveFiles = {}
-	print(PATH_SAVES)
 	for customer in os.listdir(PATH_SAVES):
 		if os.path.isdir(os.path.join(PATH_SAVES, customer)):
 			dict_saveFiles[customer] = []
@@ -238,7 +237,6 @@ def get_service_confirm(customer, timestamp, flag_prescan):
 @app.route('/<customer>/<timestamp>/generate-preview', methods=['POST'])
 def post_preview_topology(customer, timestamp):
 	if request.method == 'POST':
-		print(request.form['flag_prescan'])
 		flag_prescan = json.loads(request.form['flag_prescan'].lower())
 
 		tor_count = 2
@@ -260,7 +258,6 @@ def post_preview_topology(customer, timestamp):
 		path_prescan = PATH_CUSTOMER_PRESCAN.format(customer, timestamp)
 		
 		if flag_prescan:
-			print('recalculating topology, please wait...')
 			prescan(customer, timestamp, tor_count, tor_weight)
 			with open(os.path.join(path_prescan, 'device.json'), 'r') as file:
 				dict_devices = json.load(file)
@@ -275,7 +272,6 @@ def post_preview_topology(customer, timestamp):
 				for device_id in dict_devices[site_id]:
 					if len(set_tor) > 0:
 						if device_id in set_tor:
-							print('this is a tor: %s' % device_id)
 							dict_devices[site_id][device_id]['is_tor'] = True
 						else:
 							dict_devices[site_id][device_id]['is_tor'] = False
@@ -332,7 +328,6 @@ def get_preview_topology(customer, timestamp):
 @app.route('/<customer>/<timestamp>/save-edits/<flag>', methods=['POST'])
 def save_topology_edits(customer, timestamp, flag):
 	if request.method == 'POST':
-		print(json.dumps(request.form, indent=4))
 		flag = int(flag)
 		# customer wants to delete their current topology
 		# remove all files within customer save subdirectory
