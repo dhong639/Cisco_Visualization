@@ -37,24 +37,34 @@ class Graph:
 	def get_pairs_fabric(self, source_id, target_id):
 		if source_id in self.set_unmanaged_all or target_id in self.set_unmanaged_all:
 			return None
+		if source_id not in self.dict_edgeFabric:
+			return None
+		if target_id not in self.dict_edgeFabric[source_id]:
+			return None
 		return self.dict_edgeFabric[source_id][target_id]['pairs']
 
 	def get_intf_eth(self, device_id):
 		if device_id in self.set_unmanaged_all:
 			return None
+		if device_id not in self.dict_edgeOther:
+			return None
 		list_eth = [port for port in self.dict_edgeOther[device_id]['eth_port']]
-		for target_id in self.dict_edgeFabric[device_id]:
-			if target_id in self.set_unmanaged_other:
-				list_eth.append(target_id)
+		if device_id in self.dict_edgeFabric:
+			for target_id in self.dict_edgeFabric[device_id]:
+				if target_id in self.set_unmanaged_other:
+					list_eth.append(target_id)
 		return list_eth
 
 	def get_intf_layer3(self, device_id):
 		if device_id in self.set_unmanaged_all:
 			return None
+		if device_id not in self.dict_edgeOther:
+			return None
 		list_layer3 = [port for port in self.dict_edgeOther[device_id]['layer3']]
-		for target_id in self.dict_edgeFabric[device_id]:
-			if target_id in self.set_unmanaged_other:
-				list_layer3.append(target_id)
+		if device_id in self.dict_edgeFabric:
+			for target_id in self.dict_edgeFabric[device_id]:
+				if target_id in self.set_unmanaged_other:
+					list_layer3.append(target_id)
 		return list_layer3
 
 	def path_toTOR(self, site_id, device_id):
