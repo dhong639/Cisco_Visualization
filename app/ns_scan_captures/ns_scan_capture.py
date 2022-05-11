@@ -345,11 +345,12 @@ def primary_scan(customer, timestamp):
 				# note that the graph has not been cleaned
 				#		represents more accurate view of graph
 				#		some pairs will contain None instead of interface names
-				for pair in list_intfPair:
-					if pair[0] != None:
-						set_intf_portType(tor_i, pair[0], 'crosslink', capture_devices)
-					if pair[1] != None:
-						set_intf_portType(tor_j, pair[1], 'crosslink', capture_devices)
+				if list_intfPair:
+					for pair in list_intfPair:
+						if pair[0] != None:
+							set_intf_portType(tor_i, pair[0], 'crosslink', capture_devices)
+						if pair[1] != None:
+							set_intf_portType(tor_j, pair[1], 'crosslink', capture_devices)
 
 	# set service ports for paths to gateway site(s)
 	for path in list_path_gatewaySite:
@@ -414,6 +415,28 @@ def primary_scan(customer, timestamp):
 		dict_services = json.load(file)
 		if set(dict_services.keys()) == set(['GLOBAL']):
 			is_service_bySite = False
+	# customers should define whether or not a service is management
+	# if they don't determine by matching VLAN numbers and IP addresses
+	# if the IP address of a vlan is same as IP address of device, that vlan is management
+	for site_id in dict_services:
+		for service_id in dict_services[site_id]:
+			base = dict_services[site_id][service_id]['base']
+			if 'management' not in dict_services[site_id][service_id] or not base:
+				# even services not previously defined by a customer input
+				# shall now considered part of the input and saved as such
+				# regardless of whether not not a management vlan is found
+				dict_services[site_id][service_id]['management'] = False
+				dict_services[site_id][service_id]['base'] = True
+				# determine if vlan should be considered a management vlan
+				for device_id in capture_devices:
+					device = capture_devices[device_id]
+					if device['site_id'] == site_id or site_id == 'GLOBAL':
+						if int(service_id) in device['vlans']:
+							device_ip = device['ip_address']
+							vlan_ip = device['vlans'][int(service_id)]['ip_address']
+							dict_services[site_id][service_id]['management'] = device_ip == vlan_ip
+	with open(PATH_CUSTOMER_SAVE_SERVICE.format(customer, timestamp), 'w') as file:
+		json.dump(dict_services, file, indent=4)
 
 	# define port settings
 	list_portSetting = []
