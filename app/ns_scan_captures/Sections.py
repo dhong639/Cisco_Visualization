@@ -26,8 +26,13 @@ class Sections:
 						self.deviceID = line.split('hostname')[1].strip()
 						self.sections['device_id'] = self.deviceID
 		self.sections['interface config'] = self.make_interfaceRun(self.sections['running-config'])
-		if 'cdp neig' in self.sections:
-			self.sections['cdp neig'] = self.make_cdpNeig(self.sections['cdp neig'])
+		if 'cdp neig' in self.sections or 'cdp neighbors' in self.sections:
+			section_cdp = {}
+			if 'cdp neig' in self.sections:
+				section_cdp = self.sections['cdp neig']
+			elif 'cdp neighbors' in self.sections:
+				section_cdp = self.sections['cdp neighbors']
+			self.sections['cdp neig'] = self.make_cdpNeig(section_cdp)
 		if 'lldp nei de' in self.sections:
 			self.sections['lldp nei de'] = self.make_lldpNeiDe(self.sections['lldp nei de'])
 		if 'lldp neighbors' in self.sections:
@@ -370,6 +375,8 @@ class Sections:
 			]
 			for item in list_vlan:
 				type_, vlan = item
+				if set(dict_services.keys()) != set(['GLOBAL']) and site_id not in dict_services:
+					dict_services[site_id] = {}
 				if vlan and vlan not in dict_services[site_id]:
 					vlan = int(vlan)
 					name = '{}_{}_{}'.format(vlan, type_, site_id)
