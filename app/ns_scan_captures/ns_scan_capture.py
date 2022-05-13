@@ -420,26 +420,41 @@ def primary_scan(customer, timestamp):
 	# if the IP address of a vlan is same as IP address of device, that vlan is management
 	for site_id in dict_services:
 		for service_id in dict_services[site_id]:
-			base = dict_services[site_id][service_id]['base']
-			if 'management' not in dict_services[site_id][service_id] or not base:
-				# even services not previously defined by a customer input
-				# shall now considered part of the input and saved as such
-				# regardless of whether not not a management vlan is found
-				dict_services[site_id][service_id]['management'] = False
-				dict_services[site_id][service_id]['base'] = True
-				# determine if vlan should be considered a management vlan
-				for device_id in capture_devices:
-					device = capture_devices[device_id]
-					if device['site_id'] == site_id or site_id == 'GLOBAL':
-						if int(service_id) in device['vlans']:
-							device_ip = device['ip_address']
-							vlan_ip = device['vlans'][int(service_id)]['ip_address']
-							dict_services[site_id][service_id]['management'] = device_ip == vlan_ip
+			for service_name in dict_services[site_id][service_id]:
+				base = dict_services[site_id][service_id][service_name]['base']
+				if 'management' not in dict_services[site_id][service_id][service_name] or not base:
+					# even services not previously defined by a customer input
+					# shall now considered part of the input and saved as such
+					# regardless of whether not not a management vlan is found
+					dict_services[site_id][service_id][service_name]['management'] = False
+					#dict_services[site_id][service_id][service_name]['base'] = True
+					# determine if vlan should be considered a management vlan
+					for device_id in capture_devices:
+						device = capture_devices[device_id]
+						if device['site_id'] == site_id or site_id == 'GLOBAL':
+							if int(service_id) in device['vlans']:
+								device_ip = device['ip_address']
+								vlan_ip = device['vlans'][int(service_id)]['ip_address']
+								flag = device_ip == vlan_ip
+								dict_services[site_id][service_id][service_name]['management'] = flag
 	with open(PATH_CUSTOMER_SAVE_SERVICE.format(customer, timestamp), 'w') as file:
 		json.dump(dict_services, file, indent=4)
 
 	# define port settings
 	list_portSetting = []
+	list_existingSetting = []
+	path_existing = PATH_CUSTOMER_PRIMARY.format(customer, timestamp)
+	index_portSetting = 0
+	with open(os.path.join(path_existing, 'port-settings.json'), 'r') as file:
+		list_existingSetting = json.load(file)
+		for i in range(len(list_existingSetting)):
+			row = list_existingSetting[i]
+			id = row['port_setting_id']
+			name = row['port_setting_name']
+			del row['port_setting_id']
+			del row['port_setting_name']
+			list_existingSetting[i] = (id, name, row)
+			index_portSetting = id
 	for device_id in capture_devices:
 		site_id = capture_devices[device_id]['site_id']
 		if is_service_bySite == False:
@@ -465,17 +480,45 @@ def primary_scan(customer, timestamp):
 				"duplex": port["duplex"], 
 				"speed": port["speed"]
 			}
-			if setting not in list_portSetting:
+			is_exist = False
+			port_setting_id = None
+			for existing_setting in list_existingSetting:
+				#print(existing_setting)
+				if setting == existing_setting[2]:
+					is_exist = True
+					port_setting_id = existing_setting[0]
+			if setting not in list_portSetting and is_exist == False:
 				list_portSetting.append(setting)
 			# set setting number in device port
-			number = list_portSetting.index(setting) + 1
-			port['port_setting_id'] = number
+			if not port_setting_id:
+				port_setting_id = list_portSetting.index(setting) + index_portSetting + 1
+			port['port_setting_id'] = port_setting_id
 	for i in range(len(list_portSetting)):
-		list_portSetting[i]['port_setting_id'] = i + 1
+		list_portSetting[i]['port_setting_id'] = index_portSetting + i + 1
 		list_portSetting[i]['port_setting_name'] = None
+	for i in range(len(list_existingSetting)):
+		row = list_existingSetting[i]
+		#print(row)
+		row[2]['port_setting_id'] = row[0]
+		row[2]['port_setting_name'] = row[1]
+		list_portSetting.append(row[2])
 
 	# define port profiles
 	list_portProfile = []
+	# get existing profiles
+	list_existingProfile = []
+	path_existing = PATH_CUSTOMER_PRIMARY.format(customer, timestamp)
+	index_portProfile = 0
+	with open(os.path.join(path_existing, 'port-profiles.json'), 'r') as file:
+		list_existingProfile = json.load(file)
+		for i in range(len(list_existingProfile)):
+			row = list_existingProfile[i]
+			id = row['port_profile_id']
+			name = row['port_profile_name']
+			del row['port_profile_id']
+			del row['port_profile_name']
+			list_existingProfile[i] = (id, name, row)
+			index_portProfile = id
 	for device_id in capture_devices:
 		for port_id in capture_devices[device_id]['ivn_port']:
 			port = capture_devices[device_id]['ivn_port'][port_id]
@@ -492,16 +535,44 @@ def primary_scan(customer, timestamp):
 					"voice_vlan": port["voice_vlan"], 
 					"trunk_count": len(port["trunk_list"]), 
 					"trunk_list": port["trunk_list"], 
+					"list_existing": []
 				}
+				is_exist = False
+				port_profile_id = None
+				set_vlanCurrent = set()
+				if profile['native_vlan']:
+					set_vlanCurrent.add(profile['native_vlan'])
+				if profile['voice_vlan']:
+					set_vlanCurrent.add(profile['voice_vlan'])
+				for trunk in profile['trunk_list']:
+					if trunk:
+						set_vlanCurrent.add(trunk)
+				#print(set_vlanCurrent)
+				for existing_profile in list_existingProfile:
+					set_vlanExist = set(existing_profile[2]['list_existing'])
+					if None in set_vlanExist:
+						set_vlanExist.remove(None)
+					#print(existing_setting)
+					if set_vlanExist == set_vlanCurrent:
+						is_exist = True
+						port_profile_id = existing_profile[0]
+						#print('found existing profile: %d' % existing_profile[0])
 				if profile not in list_portProfile:
 					list_portProfile.append(profile)
 				# set profile number in device port
-				number = list_portProfile.index(profile) + 1
-				port['port_profile_id'] = number
+				if not port_profile_id:
+					port_profile_id = list_portProfile.index(profile) + index_portProfile + 1
+				port['port_profile_id'] = port_profile_id
 	for i in range(len(list_portProfile)):
-		list_portProfile[i]['port_profile_id'] = i + 1
+		list_portProfile[i]['port_profile_id'] = index_portProfile + i + 1
 		list_portProfile[i]['port_profile_name'] = None
-	
+	for i in range(len(list_existingProfile)):
+		row = list_existingProfile[i]
+		row[2]['port_profile_id'] = row[0]
+		row[2]['port_profile_name'] = row[1]
+		list_portProfile.append(row[2])
+	print(json.dumps(list_portProfile, indent=4))
+
 	path_primary = PATH_CUSTOMER_PRIMARY.format(customer, timestamp)
 	# output device information to file
 	with open(os.path.join(path_primary, 'capture-devices.json'), 'w') as file:
