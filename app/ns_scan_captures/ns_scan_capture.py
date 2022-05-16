@@ -70,6 +70,22 @@ def count_vlan(device_id, intf_id, capture_devices):
 	count += len(dict_port['list_foundMAC'])
 	return count
 
+def get_setVLAN(dict_):
+	set_vlan = set()
+	if 'voice_vlan' in dict_:
+		set_vlan.add(dict_['voice_vlan'])
+	if 'native_vlan' in dict_:
+		set_vlan.add(dict_['native_vlan'])
+	if 'trunk_list' in dict_:
+		for vlan in dict_['trunk_list']:
+			set_vlan.add(vlan)
+	if 'list_existing' in dict_:
+		for vlan in dict_['list_existing']:
+			set_vlan.add(vlan)
+	if None in set_vlan:
+		set_vlan.remove(None)
+	return set_vlan
+
 def prescan(customer, timestamp, tor_count, tor_weight):
 	# number of tors to automatically generate
 	tor_count = 2 if tor_count == '' else int(tor_count)
@@ -427,7 +443,6 @@ def primary_scan(customer, timestamp):
 					# shall now considered part of the input and saved as such
 					# regardless of whether not not a management vlan is found
 					dict_services[site_id][service_id][service_name]['management'] = False
-					#dict_services[site_id][service_id][service_name]['base'] = True
 					# determine if vlan should be considered a management vlan
 					for device_id in capture_devices:
 						device = capture_devices[device_id]
@@ -442,136 +457,115 @@ def primary_scan(customer, timestamp):
 
 	# define port settings
 	list_portSetting = []
-	list_existingSetting = []
+	#list_existingSetting = []
 	path_existing = PATH_CUSTOMER_PRIMARY.format(customer, timestamp)
 	index_portSetting = 0
 	with open(os.path.join(path_existing, 'port-settings.json'), 'r') as file:
-		list_existingSetting = json.load(file)
-		for i in range(len(list_existingSetting)):
-			row = list_existingSetting[i]
-			id = row['port_setting_id']
-			name = row['port_setting_name']
-			del row['port_setting_id']
-			del row['port_setting_name']
-			list_existingSetting[i] = (id, name, row)
-			index_portSetting = id
+		list_portSetting = json.load(file)
+		if len(list_portSetting) > 0:
+			index_portSetting = list_portSetting[-1]['port_setting_id']
 	for device_id in capture_devices:
 		site_id = capture_devices[device_id]['site_id']
 		if is_service_bySite == False:
 			site_id = 'GLOBAL'
 		for port_id in capture_devices[device_id]['ivn_port']:
+			port_setting_id = None
 			port = capture_devices[device_id]['ivn_port'][port_id]
 			voice_pair = None
 			voice_vlan = port['voice_vlan']
 			if voice_vlan != None:
 				voice_pair = [site_id, voice_vlan]
-			setting = {
-				"voice_vlan": voice_pair,
-				"stp_portfast": port["stp_portfast"],
-				"stp_bpdufilter": port["stp_bpdufilter"], 
-				"stp_bpduguard": port["stp_bpduguard"], 
-				"stp_guardloop": port["stp_guardloop"], 
-				"poe_enabled": port["poe_enabled"], 
-				"port_security_mode": port["port_security_mode"], 
-				"port_security_maximum": port["port_security_maximum"], 
-				"violation_mode": port["violation_mode"], 
-				"aging_type": port["aging_type"], 
-				"aging_time": port["aging_time"], 
-				"duplex": port["duplex"], 
-				"speed": port["speed"]
-			}
-			is_exist = False
-			port_setting_id = None
-			for existing_setting in list_existingSetting:
-				#print(existing_setting)
-				if setting == existing_setting[2]:
-					is_exist = True
-					port_setting_id = existing_setting[0]
-			if setting not in list_portSetting and is_exist == False:
-				list_portSetting.append(setting)
-			# set setting number in device port
+			
+			for setting in list_portSetting:
+				is_match = True
+				for key in setting.keys():
+					if key == 'voice_vlan':
+						if setting[key] != voice_pair:
+							is_match = False
+					elif key != 'port_setting_id' and key != 'port_setting_name':
+						if setting[key] != port[key]:
+							is_match = False
+				if is_match == True:
+					port_setting_id = setting['port_setting_id']
+			
 			if not port_setting_id:
-				port_setting_id = list_portSetting.index(setting) + index_portSetting + 1
-			port['port_setting_id'] = port_setting_id
-	for i in range(len(list_portSetting)):
-		list_portSetting[i]['port_setting_id'] = index_portSetting + i + 1
-		list_portSetting[i]['port_setting_name'] = None
-	for i in range(len(list_existingSetting)):
-		row = list_existingSetting[i]
-		#print(row)
-		row[2]['port_setting_id'] = row[0]
-		row[2]['port_setting_name'] = row[1]
-		list_portSetting.append(row[2])
+				port_setting_id = len(list_portSetting) + index_portSetting
+				list_portSetting.append(
+					{
+						"port_setting_id": port_setting_id,
+						"port_setting_name": None,
+						"voice_vlan": voice_pair,
+						"stp_portfast": port["stp_portfast"],
+						"stp_bpdufilter": port["stp_bpdufilter"], 
+						"stp_bpduguard": port["stp_bpduguard"], 
+						"stp_guardloop": port["stp_guardloop"], 
+						"poe_enabled": port["poe_enabled"], 
+						"port_security_mode": port["port_security_mode"], 
+						"port_security_maximum": port["port_security_maximum"], 
+						"violation_mode": port["violation_mode"], 
+						"aging_type": port["aging_type"], 
+						"aging_time": port["aging_time"], 
+						"duplex": port["duplex"], 
+						"speed": port["speed"]
+					}
+				)
+			capture_devices[device_id]['ivn_port'][port_id]['port_setting_id'] = port_setting_id
 
-	# define port profiles
+	# define and get port profiles (existing and new)
 	list_portProfile = []
-	# get existing profiles
-	list_existingProfile = []
 	path_existing = PATH_CUSTOMER_PRIMARY.format(customer, timestamp)
 	index_portProfile = 0
 	with open(os.path.join(path_existing, 'port-profiles.json'), 'r') as file:
-		list_existingProfile = json.load(file)
-		for i in range(len(list_existingProfile)):
-			row = list_existingProfile[i]
-			id = row['port_profile_id']
-			name = row['port_profile_name']
-			del row['port_profile_id']
-			del row['port_profile_name']
-			list_existingProfile[i] = (id, name, row)
-			index_portProfile = id
+		# at this point, all profiles that previously existed will be present
+		# existing profiles are sorted in ascending order of 'port_profile_id'
+		#		set port_profile_id as last profile_id found in list
+		#		any new port_profile_id increments from this value 
+		list_portProfile = json.load(file)
+		if len(list_portProfile) > 0:
+			index_portProfile = list_portProfile[-1]['port_profile_id']
 	for device_id in capture_devices:
 		for port_id in capture_devices[device_id]['ivn_port']:
 			port = capture_devices[device_id]['ivn_port'][port_id]
 			if 'port_type' in port and port['port_type'] != 'fabric':
+				# information to check if port profile exists
+				#		port_type 
+				#		site_id is from device, unless services are global or port_type is layer3
+				#		set_vlanCurrent is all vlans on port
+				#		port_profile_id is None for now
+				#			use an existing id if port_type, site_id, and set_vlanCurrent match
+				#			otherwise, count up from last known port_profile_id
+				#				last known is count of total previously known port profile ids
+				port_type = port['port_type']
 				site_id = capture_devices[device_id]['site_id']
 				if is_service_bySite == False:
 					site_id = 'GLOBAL'
-				# layer3 links have no vlans, no reason to keep track of vlan site
 				site_id = site_id if port['port_type'] != 'layer3' else None
-				profile = {
-					"site_id": site_id, 
-					"port_type": port["port_type"], 
-					"native_vlan": port["native_vlan"], 
-					"voice_vlan": port["voice_vlan"], 
-					"trunk_count": len(port["trunk_list"]), 
-					"trunk_list": port["trunk_list"], 
-					"list_existing": []
-				}
-				is_exist = False
+				set_vlanCurrent = get_setVLAN(port)
 				port_profile_id = None
-				set_vlanCurrent = set()
-				if profile['native_vlan']:
-					set_vlanCurrent.add(profile['native_vlan'])
-				if profile['voice_vlan']:
-					set_vlanCurrent.add(profile['voice_vlan'])
-				for trunk in profile['trunk_list']:
-					if trunk:
-						set_vlanCurrent.add(trunk)
-				#print(set_vlanCurrent)
-				for existing_profile in list_existingProfile:
-					set_vlanExist = set(existing_profile[2]['list_existing'])
-					if None in set_vlanExist:
-						set_vlanExist.remove(None)
-					#print(existing_setting)
-					if set_vlanExist == set_vlanCurrent:
-						is_exist = True
-						port_profile_id = existing_profile[0]
-						#print('found existing profile: %d' % existing_profile[0])
-				if profile not in list_portProfile:
-					list_portProfile.append(profile)
-				# set profile number in device port
+				# compare site_id, port_type, vlans against all profiles that currently exist
+				# if found, use vlan id of that existing profile
+				# otherwise, create new profile and increment port_profile_id
+				for profile in list_portProfile:
+					set_vlanExist = get_setVLAN(profile)
+					same_type = profile['port_type'] == port_type
+					same_vlan = set_vlanExist == set_vlanCurrent
+					same_site = profile['site_id'] == site_id
+					if same_type and same_vlan and same_site:
+						port_profile_id = profile['port_profile_id']
 				if not port_profile_id:
-					port_profile_id = list_portProfile.index(profile) + index_portProfile + 1
-				port['port_profile_id'] = port_profile_id
-	for i in range(len(list_portProfile)):
-		list_portProfile[i]['port_profile_id'] = index_portProfile + i + 1
-		list_portProfile[i]['port_profile_name'] = None
-	for i in range(len(list_existingProfile)):
-		row = list_existingProfile[i]
-		row[2]['port_profile_id'] = row[0]
-		row[2]['port_profile_name'] = row[1]
-		list_portProfile.append(row[2])
-	print(json.dumps(list_portProfile, indent=4))
+					port_profile_id = len(list_portProfile) + index_portProfile
+					list_portProfile.append({
+						"port_profile_id": port_profile_id,
+						"port_profile_name": None,
+						"site_id": site_id, 
+						"port_type": port["port_type"], 
+						"native_vlan": port["native_vlan"], 
+						"voice_vlan": port["voice_vlan"], 
+						"trunk_count": len(port["trunk_list"]), 
+						"trunk_list": port["trunk_list"], 
+						"list_existing": []
+					})
+				capture_devices[device_id]['ivn_port'][port_id]['port_profile_id'] = port_profile_id
 
 	path_primary = PATH_CUSTOMER_PRIMARY.format(customer, timestamp)
 	# output device information to file
