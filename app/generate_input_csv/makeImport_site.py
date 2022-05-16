@@ -87,9 +87,9 @@ def makeImport_site(dict_device, dict_service, path_out, version, date, link=Non
 		mgmt_vlan = dict_device[listTOR[0]]['mgmt_vlan']
 		if mgmt_vlan != None:
 			if siteID in dict_service:
-				mgmt_vlan = dict_service[siteID][str(mgmt_vlan)]['name']
+				mgmt_vlan = list(dict_service[siteID][str(mgmt_vlan)].keys())[0]
 			elif 'global' in dict_service:
-				mgmt_vlan = dict_service['global'][str(mgmt_vlan)]['name']
+				mgmt_vlan = list(dict_service['global'][str(mgmt_vlan)].keys())[0]
 		else:
 			mgmt_vlan = str(mgmt_vlan) + ' - no site'
 		list_endpointName = []
