@@ -1,0 +1,134 @@
+<html>
+	<head>
+		<title>Confirm Provisioning</title>
+		<link rel="stylesheet" href="{{url_for('static', filename='css/bootstrap/bootstrap.min.css')}}">
+		<!--<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.3.1/dist/css/bootstrap.min.css" integrity="sha384-ggOyR0iXCbMQv3Xipma34MD+dH/1fQ784/j6cY/iJTQUOhcWr7x9JvoRxT2MZw1T" crossorigin="anonymous">-->
+		<link rel="icon" type="image/x-icon" href="{{url_for('static', filename='favicon.ico')}}">
+
+		<style>
+			h1, h3 {
+				text-align: center;
+			}
+			hr {
+				margin-top: 0;
+				/*margin-bottom: 0;*/
+				border-bottom: dotted black;
+			}
+			button {
+				width: 100%;
+				height: 100%
+			}
+		</style>
+	</head>
+	<body>
+		<div class="container">
+			<div class="row">
+				<div class="col-lg-12">
+					<h1>Confirm Profiles and Settings for {{ customer }} (ignore if empty)</h1>
+				</div>
+			</div>
+			<hr />
+			<div class="row">
+				<div class="col-md-12">
+					<h3>Newly Discovered Profiles</h3>
+				</div>
+			</div>
+			<div style="overflow-y: scroll; height: 30%">
+				<table class="table table-striped table-hover">
+					<thead class="thead-dark" style="position: sticky; top: 0%">
+						<th scope="col">port_profile_id</th>
+						<th scope="col">site_id</th>
+						<th scope="col">port_type</th>
+						<th scope="col">native_vlan</th>
+						<th scope="col">voice_vlan</th>
+						<th scope="col">trunk_list</th>
+					</thead>
+					<tbody>
+						{% for profile in list_profiles %}
+						<tr>
+							<td scope="row">{{ profile.port_profile_id }}</td>
+							<td>{{ profile.site_id }}</td>
+							<td>{{ profile.port_type }}</td>
+							<td>
+								{% if profile.native_vlan != None %}
+									{{ profile.native_vlan }}
+								{% endif %}
+							</td>
+							<td>
+								{% if profile.voice_vlan != None %}
+									{{ profile.voice_vlan }}
+								{% endif %}
+							</td>
+							<td>
+								{% for vlan in profile.trunk_list %}
+									{{ vlan }}
+								{% endfor %}
+							</td>
+						</tr>
+						{% endfor %}
+					</tbody>
+				</table>
+			</div>
+			<hr />
+			<div class="row">
+				<div class="col-md-12">
+					<h3>Newly Discovered Profiles</h3>
+				</div>
+			</div>
+			<div style="overflow-y: scroll; height: 30%">
+				<table class="table table-striped table-hover">
+					<thead class="thead-dark" style="position: sticky; top: 0%">
+						<th scope="col">port_setting_id</th>
+						<th scope="col">speed</th>
+						<th scope="col">duplex</th>
+						<th scope="col">aging_time</th>
+						<th scope="col">aging_type</th>
+						<th scope="col">violation_mode</th>
+						<th scope="col">port_security_maximum</th>
+						<th scope="col">port_security_mode</th>
+						<th scope="col">poe_enabled</th>
+						<th scope="col">stp_guardloop</th>
+						<th scope="col">stp_bpduguard</th>
+						<th scope="col">stp_bpdufilter</th>
+						<th scope="col">stp_portfast</th>
+						<th scope="col">voice_vlan</th>
+					</thead>
+					<tbody>
+						{% for setting in list_settings %}
+						<tr>
+							<td scope="row">{{ setting.port_setting_id }}</td>
+							<td>{{ setting.speed }}</td>
+							<td>{{ setting.duplex }}</td>
+							<td>{{ setting.aging_time }}</td>
+							<td>{{ setting.aging_type }}</td>
+							<td>{{ setting.violation_mode }}</td>
+							<td>{{ setting.port_security_maximum }}</td>
+							<td>{{ setting.port_security_mode }}</td>
+							<td>{{ setting.poe_enabled }}</td>
+							<td>{{ setting.stp_guardloop }}</td>
+							<td>{{ setting.stp_bpduguard }}</td>
+							<td>{{ setting.stp_bpdufilter }}</td>
+							<td>{{ setting.stp_portfast }}</td>
+							<td>
+								{% if setting.voice_vlan != None %}
+									{{ setting.voice_vlan[0] }} - {{ setting.voice_vlan[1] }}
+								{% endif %}
+							</td>
+						</tr>
+						{% endfor %}
+					</tbody>
+				</table>
+			</div>
+			<br />
+			<hr />
+			<br />
+			<div class="row">
+				<div class="col-md-12">
+					<button onclick="location.href='/{{ customer }}/{{ timestamp }}/output';">
+						Continue to download output csv files ⟹
+					</button>
+				</div>
+			</div>
+		</div>
+	</body>
+</html>

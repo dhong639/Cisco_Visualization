@@ -6,6 +6,7 @@
 		<!--<link rel="stylesheet" href="../static/stylesheet/bootstrap.min.css">
 		<link rel="icon" type="image/x-icon" href="../static/favicon.ico">-->
 		<link rel="stylesheet" href="{{url_for('static', filename='css/bootstrap/bootstrap.min.css')}}">
+		<!--<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.3.1/dist/css/bootstrap.min.css" integrity="sha384-ggOyR0iXCbMQv3Xipma34MD+dH/1fQ784/j6cY/iJTQUOhcWr7x9JvoRxT2MZw1T" crossorigin="anonymous">-->
 		<link rel="icon" type="image/x-icon" href="{{url_for('static', filename='favicon.ico')}}">
 
 		<style>
@@ -253,25 +254,42 @@
 							<li>port settings from existing site, will use original settings when possible</li>
 						</div>
 						<div class="col-md-3">
-							<input type="file" id="input_portSettings" name="input_portSettings">
+							<input type="file" id="import_portSettings" name="import_portSettings">
 						</div>
 					</div>
 					<br />
 
 					<!--
-						existing port profiles
+						existing port service profiles
 					-->
 					<div class="row">
 						<div class="col-md-3">
-							<label for="import_portProfiles">
-								<strong>Input existing port profiles: </strong>
+							<label for="import_portProfiles_service">
+								<strong>Input service port profiles: </strong>
 							</label>
 						</div>
 						<div class="col-md-6">
-							<li>port profiles from existing site, use original profiles when possible</li>
+							<li>service port profiles from existing site, use originals when possible</li>
 						</div>
 						<div class="col-md-3">
-							<input type="file" id="input_portProfiles" name="input_portProfiles">
+							<input type="file" id="import_portProfiles_service" name="import_portProfiles_service">
+						</div>
+					</div>
+
+					<!--
+						existing port eth profiles
+					-->
+					<div class="row">
+						<div class="col-md-3">
+							<label for="import_portProfiles_eth">
+								<strong>Input eth port profiles: </strong>
+							</label>
+						</div>
+						<div class="col-md-6">
+							<li>eth port profiles from existing site, use originals when possible</li>
+						</div>
+						<div class="col-md-3">
+							<input type="file" id="import_portProfiles_eth" name="import_portProfiles_eth">
 						</div>
 					</div>
 				</div>
@@ -362,14 +380,27 @@
 		//document.getElementById("customer_type").innerHTML = "new customer (toggle) ➜"
 		function change_customerType() {
 			if(flag == true) {
+				// change headers
 				document.getElementById("provisioning_header").innerHTML = "Load existing provisioning"
 				document.getElementById("new_customer").classList.add("hidden")
 				document.getElementById("existing_customer").classList.remove("hidden")
+
+				// remove file inputs for new customer
+				document.getElementById('input_service').value = null
+
 				flag = false
 			} else {
+				// change headers
 				document.getElementById("provisioning_header").innerHTML = "Generate new provisioning"
 				document.getElementById("new_customer").classList.remove("hidden")
 				document.getElementById("existing_customer").classList.add("hidden")
+
+				// remove file inputs for existing customer
+				document.getElementById('import_service').value = null
+				document.getElementById('import_portSettings').value = null
+				document.getElementById('import_portProfiles_service').value = null
+				document.getElementById('import_portProfiles_eth').value = null
+
 				flag = true
 			}
 		}
