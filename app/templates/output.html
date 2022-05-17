@@ -18,12 +18,12 @@
 			input {
 				width: 100%
 			}
-			h1 {
+			h1, h4, h5 {
 				text-align: center;
 			}
-			h5 {
+			/*h5 {
 				text-align: center;
-			}
+			}*/
 			.left {
 				background-color:LightSteelBlue
 			}
@@ -39,10 +39,24 @@
 			</div>
 			<div class="row">
 				<div class="col-lg-12">
-					<h5>download files below (please follow upload order)</h5>
+					<h4>download files below (please follow upload order)</h4>
 				</div>
 			</div>
 			<br />
+			<div class="row">
+				<div class="col-md-2">
+					<h5>Name</h5>
+				</div>
+				<div class="col-md-6">
+					<h5>Description and Details</h5>
+				</div>
+				<div class="col-md-2">
+					<h5>(incremental)</h5>
+				</div>
+				<div class="col-md-2">
+					<h5>Download</h5>
+				</div>
+			</div>
 			<!--
 				download current ns_scan_capture output
 			-->
@@ -54,12 +68,17 @@
 							<p>(optional)</p>
 						</label>
 					</div>
-					<div class="col-md-8">
+					<div class="col-md-6">
 						<li>json description of the Black Box configuration</li>
 						<li>capture-devices.json describes overall device configuration</li>
 						<li>port-profiles.json describes services (VLANs) on ports</li>
 						<li>port-settings.json describes configuration of ports</li>
 						<li>please keep the profiles and settings files for future imports</li>
+					</div>
+					<div class="col-md-2">
+						<!--
+							<input type="checkbox" id="incremental_output" name="incremental_output" value="true">
+						-->
 					</div>
 					<div class="col-md-2">
 						<button type="submit" id="get_captureOutput">download</button>
@@ -76,9 +95,12 @@
 							<b>1. Service Import</b>
 						</label>
 					</div>
-					<div class="col-md-8">
+					<div class="col-md-6">
 						<li>maps vlan IDs, names, and sites</li>
 						<li>notes management VLANs</li>
+					</div>
+					<div class="col-md-2">
+						<input type="checkbox" id="incremental_service" name="incremental_service" value="true">
 					</div>
 					<div class="col-md-2">
 						<button type="submit" id="get_service_import">download</button>
@@ -96,10 +118,15 @@
 							<b>2. Site Import</b>
 						</label>
 					</div>
-					<div class="col-md-8">
+					<div class="col-md-6">
 						<li>lists what switches are top-of-rack for given sites</li>
 						<li>notes management VLAN for site</li>
 						<li>lists aggregated links in site</li>
+					</div>
+					<div class="col-md-2">
+						<!--
+							<input type="checkbox" id="incremental_site" name="incremental_site" value="true">
+						-->
 					</div>
 					<div class="col-md-2">
 						<button type="submit" id="get_site_import">download</button>
@@ -117,12 +144,15 @@
 							<b>3. Service Port Import</b>
 						</label>
 					</div>
-					<div class="col-md-8">
+					<div class="col-md-6">
 						<li>lists every port profile that isn't an eth_port</li>
 						<li>crosslinks are used to enforce tree/branch model</li>
 						<li>layer3 links are links with "no switchport" configuration</li>
-						<li>service up/downlinks are links to outside network via non-fabric layer3 device</li>
+						<li>service up/downlinks reach outside network via non-fabric layer3 device</li>
 						<li>lists relevant services associated with profile</li>
+					</div>
+					<div class="col-md-2">
+						<input type="checkbox" id="incremental_servicePort" name="incremental_servicePort" value="true">
 					</div>
 					<div class="col-md-2">
 						<button type="submit" id="get_servicePort_import">download</button>
@@ -140,10 +170,13 @@
 							<b>4. Eth Port Import</b>
 						</label>
 					</div>
-					<div class="col-md-8">
+					<div class="col-md-6">
 						<li>lists every eth_port port profile</li>
 						<li>eth_ports are links to edge devices with at least an access vlan</li>
 						<li>lists relevant services associated with profile</li>
+					</div>
+					<div class="col-md-2">
+						<input type="checkbox" id="incremental_ethPort" name="incremental_ethPort" value="true">
 					</div>
 					<div class="col-md-2">
 						<button type="submit" id="get_ethPort_import">download</button>
@@ -161,10 +194,13 @@
 							<b>5. Port Settings Import</b>
 						</label>
 					</div>
-					<div class="col-md-8">
+					<div class="col-md-6">
 						<li>lists every port setting profile</li>
 						<li>describes how a given port is configured</li>
 						<li>is mostly not concerned with services</li>
+					</div>
+					<div class="col-md-2">
+						<input type="checkbox" id="incremental_settings" name="incremental_settings" value="true">
 					</div>
 					<div class="col-md-2">
 						<button type="submit" id="get_portSettings_import">download</button>
@@ -182,10 +218,15 @@
 							<b>6. Endpoints Import</b>
 						</label>
 					</div>
-					<div class="col-md-8">
+					<div class="col-md-6">
 						<li>creates endpoint object for fabric switch</li>
 						<li>describes parent switch (path from current switch to ToR)</li>
 						<li>provides labels for ports</li>
+					</div>
+					<div class="col-md-2">
+						<!--
+							<input type="checkbox" id="incremental_endpoints" name="incremental_endpoints" value="true">
+						-->
 					</div>
 					<div class="col-md-2">
 						<button type="submit" id="get_endpoints_import">download</button>
@@ -203,9 +244,14 @@
 							<b>7. LAGs Import</b>
 						</label>
 					</div>
-					<div class="col-md-8">
+					<div class="col-md-6">
 						<li>creates lag objects</li>
 						<li>note port profile and setting on lag</li>
+					</div>
+					<div class="col-md-2">
+						<!--
+							<input type="checkbox" id="incremental_lags" name="incremental_lags" value="true">
+						-->
 					</div>
 					<div class="col-md-2">
 						<button type="submit" id="get_lags_import">download</button>
@@ -223,9 +269,14 @@
 							<b>8. Device Settings Import</b>
 						</label>
 					</div>
-					<div class="col-md-8">
+					<div class="col-md-6">
 						<li>creates device settings</li>
 						<li>adjusts power-over-ethernet</li>
+					</div>
+					<div class="col-md-2">
+						<!--
+							<input type="checkbox" id="incremental_deviceSettings" name="incremental_deviceSettings" value="true">
+						-->
 					</div>
 					<div class="col-md-2">
 						<button type="submit" id="get_deviceSettings_import">download</button>
@@ -243,10 +294,15 @@
 							<b>9. Bundles Import</b>
 						</label>
 					</div>
-					<div class="col-md-8">
+					<div class="col-md-6">
 						<li>creates bundle for endpoint</li>
 						<li>applies device setting to switch</li>
 						<li>set a port profile and setting for each port, if applicable</li>
+					</div>
+					<div class="col-md-2">
+						<!--
+							<input type="checkbox" id="incremental_bundles" name="incremental_bundles" value="true">
+						-->
 					</div>
 					<div class="col-md-2">
 						<button type="submit" id="get_bundles_import">download</button>
@@ -264,7 +320,7 @@
 							<b>10. Controllers Import</b>
 						</label>
 					</div>
-					<div class="col-md-8">
+					<div class="col-md-6">
 						<div class="row">
 							<div class="col-sm-3">
 								<label for="sdlc">input controller name: </label>
@@ -298,6 +354,11 @@
 								<p>(recommended) used for debugging purposes</p>
 							</div>
 						</div>
+					</div>
+					<div class="col-md-2">
+						<!--
+							<input type="checkbox" id="incremental_controllers" name="incremental_controllers" value="true">
+						-->
 					</div>
 					<div class="col-md-2">
 						<button type="submit" id="get_controllers_import">download</button>
