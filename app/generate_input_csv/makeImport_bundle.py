@@ -162,7 +162,7 @@ def makeImport_bundle(dict_device, list_portProfile, list_portSetting, maxPortCo
 			if isLAG:
 				row[index] = 'lagg_group'
 			else:
-				if portType == None:
+				if portType == None or portType == 'fabric':
 					row[index] = None
 				elif portType == 'eth_port':
 					row[index] = 'eth_port'
