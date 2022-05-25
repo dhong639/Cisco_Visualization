@@ -231,11 +231,58 @@ function load_graph(pending_device, pending_site, set_currentSite, graph) {
 		}
 	})
 
+	/*
+		links from fabric devices to TOR are called vertical
+		some links are redundant, and these links are horizontal
+		horizontal links will be crosslinks (in this case, dashed lines)
+	*/
+	var dict_vertical = graph.get_dict_vertical()
+	console.log(dict_vertical)
+
 	// declare cytoscape object
 	var cy = cytoscape({
 		container: document.getElementById('cy'),
 		wheelSensitivity: 0.1,
-		elements: []
+		elements: [],
+		style: [
+			{
+				selector: 'node',
+				style: {
+					'label': 'data(label)',
+					'text-wrap': 'wrap',
+					'height': 'data(size)',
+					'width': 'data(size)',
+					'text-valign': 'center',
+					'text-halign': 'center',
+					'shape': 'data(shape)',
+					'background-color': 'data(color_main)',
+					'background-opacity': 0.75
+				}
+			}, 
+			{
+				selector: 'edge',
+				style: {
+					'curve-style': 'bezier',
+					'source-label': 'data(source_label)',
+					'source-text-offset': 50,
+					'source-text-rotation': 'autorotate',
+					'target-label': 'data(target_label)',
+					'target-text-offset': 50,
+					'target-text-rotation': 'autorotate',
+					'text-wrap': 'wrap',
+					//'line-color': 'data(color_main)',
+					'line-opacity': 0.5,
+					'line-style': 'data(line_style)'
+				}
+			}, 
+			{
+				selector: 'node:selected',
+				style: {
+					'background-color': 'data(color_invert)',
+					'line-color': 'data(color_invert)'
+				}
+			}
+		]
 	})
 	
 	// set sizes of nodes
@@ -317,8 +364,12 @@ function load_graph(pending_device, pending_site, set_currentSite, graph) {
 						link is between TORs
 						link is to a layer3 uplink
 						link is uplink to central site
+						link is horizontal (redundant)
 					set edge as dashed
 				*/
+				if(source_id in dict_vertical && !dict_vertical[source_id].has(target_id)) {
+					line_style = 'dashed'
+				}
 				for(var site_id in dict_devices) {
 					site = dict_devices[site_id]
 					if(source_id in site && target_id in site) {
@@ -338,15 +389,19 @@ function load_graph(pending_device, pending_site, set_currentSite, graph) {
 				*/
 				if(set_validNodes.has(source_id) && set_validNodes.has(target_id)) {
 					if(!set_edgeID.has(edge_id) && !set_edgeID.has(edge_reverse)) {
+						var source_label = pair[0]
+						source_label += ' - ' + dict_interfaces[source_id][pair[0]]['port_number']
+						var target_label = pair[1]
+						target_label += ' - ' + dict_interfaces[target_id][pair[1]]['port_number']
 						cy.add({
 							data: {
 								id: edge_id,
 								source: source_id,
 								target: target_id,
-								source_label: pair[0],
-								target_label: pair[1],
-								color_main: color,
-								color_invert: invertColor(color),
+								source_label: source_label,
+								target_label: target_label,
+								//color_main: color,
+								//color_invert: invertColor(color),
 								line_style: line_style
 							}
 						})
@@ -364,7 +419,7 @@ function load_graph(pending_device, pending_site, set_currentSite, graph) {
 	if(document.getElementById('showEth').checked == true) {
 		set_other('eth_port', set_validNodes, cy)
 	}
-	cy.style().selector("node").style("label", "data(label)");
+	/*cy.style().selector("node").style("label", "data(label)");
 	cy.style().selector("node").style("text-wrap", "wrap");
 	cy.style().selector("node").style("height", "data(size)");
 	cy.style().selector("node").style("width", "data(size)");
@@ -385,8 +440,8 @@ function load_graph(pending_device, pending_site, set_currentSite, graph) {
 	cy.style().selector("edge").style("line-opacity", 0.5);
 	cy.style().selector("edge").style("line-style", "data(line_style)")
 	cy.style().selector(":selected").style("background-color", "data(color_invert)")
-	cy.style().selector(":selected").style("line-color", "data(color_invert)")
-	if(set_edgeID.size < 15) {
+	cy.style().selector(":selected").style("line-color", "data(color_invert)")*/
+	/*if(set_edgeID.size < 15) {
 		cy.layout({
 			name: 'concentric'
 		}).run()
@@ -397,5 +452,11 @@ function load_graph(pending_device, pending_site, set_currentSite, graph) {
 			"nodeRepulsion": node => 999999, 
 			"idealEdgeLength": edge => 250
 		}).run();
-	}
+	}*/
+	cy.layout({
+		name: 'fcose', 
+		"edgeElasicity": edge => 0,  
+		"nodeRepulsion": node => 999999, 
+		"idealEdgeLength": edge => 250
+	}).run();
 }
