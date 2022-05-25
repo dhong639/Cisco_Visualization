@@ -34,7 +34,7 @@ class Graph {
 			each site can contain a number of unmanaged devices
 			there are two kinds of unmanaged devices:
 				other	any layer 2 unmanaged device
-				router	if no longer managed, all layer 3 switche are treated as routers
+				router	if no longer managed, all layer 3 switches are treated as routers
 						used to determine gateway sites
 			if a device on a path is within the total set of unmanaged devices,
 			where total set is the union of 'other' and 'router',
@@ -42,7 +42,6 @@ class Graph {
 
 		*/
 		this.site2unmanaged = {}
-
 		/*
 			counts number of layer3 uplinks in a site
 			a gateway is a site with at least one layer3 uplink
@@ -50,6 +49,12 @@ class Graph {
 				if a layer3 switch is managed, it may remove a gateway site
 		*/
 		this.site2countLayer3 = {}
+		/*
+			record what site a device is in
+			mostly used to calculate paths from device to TOR
+			note that shortest paths contain overlapping subproblems
+		*/
+		this.device2site = {}
 
 		/*
 			count_nodes is number of devices on the network provided by customer
@@ -71,6 +76,8 @@ class Graph {
 				this.site2countLayer3[site_id] = 0
 			}
 			for(var device_id in dict_devices[site_id]) {
+				// map device to site_id for ease of access
+				this.device2site[device_id] = site_id
 				// increment number of nodes in graph
 				this.count_nodes += 1
 				// add to tors in site if device is a tor
@@ -362,6 +369,68 @@ class Graph {
 		}
 		this.weights[target_id][source_id] = weight
 	}
+	get_dict_vertical() {
+		var dict_vertical = {}
+		for(var device_id in this.edges) {
+			//console.log(device_id)
+			var site_id = this.device2site[device_id]
+			var not_tor = !this.site2tor[site_id].has(device_id)
+			var not_unmanaged_router = !this.site2unmanaged[site_id]['router'].has(device_id)
+			var not_unmanaged_other = !this.site2unmanaged[site_id]['other'].has(device_id)
+			if(not_tor && not_unmanaged_router && not_unmanaged_other) {
+				//console.log(device_id)
+				var length_min = Infinity
+				var shortest_path = []
+				//console.log(this.site2tor[site_id])
+				this.site2tor[site_id].forEach(tor_id => {
+					var path = this.helper_dijkstra(device_id, tor_id)
+					if(path) {
+						if(path.length < length_min) {
+							length_min = path.length
+							shortest_path = []
+							shortest_path.push(path)
+						}
+						else if(path.length == 2 && length_min == 2) {
+							shortest_path.push(path)
+						}
+					}
+					if(path && path.length < length_min) {
+						length_min = path.length
+						shortest_path = path
+					}
+				})
+				//console.log(shortest_path)
+				for(var i = 0; i < shortest_path.length; i++) {
+					//console.log(shortest_path[i])
+					for(var j = 1; j < shortest_path[i].length; j++) {
+						var source_id = shortest_path[i][j - 1]
+						if(source_id in dict_vertical == false) {
+							dict_vertical[source_id] = new Set()
+						}
+						var target_id = shortest_path[i][j]
+						if(target_id in dict_vertical == false) {
+							dict_vertical[target_id] = new Set()
+						}
+						dict_vertical[source_id].add(target_id)
+						dict_vertical[target_id].add(source_id)
+					}
+				}
+				/*for(var i = 1; i < shortest_path.length; i++) {
+					var source_id = shortest_path[i - 1]
+					if(source_id in dict_vertical == false) {
+						dict_vertical[source_id] = new Set()
+					}
+					var target_id = shortest_path[i]
+					if(target_id in dict_vertical == false) {
+						dict_vertical[target_id] = new Set()
+					}
+					dict_vertical[source_id].add(target_id)
+					dict_vertical[target_id].add(source_id)
+				}*/
+			}
+		}
+		return dict_vertical
+	}
 	/*
 		helper_dijkstra
 			input:
@@ -400,8 +469,11 @@ class Graph {
 			
 			destinations.forEach(next_node => {
 				var weight = this.weights[current_node][next_node] + weight_to_current_node
+				// if a node is unmanaged, set it to the highest reasonable possible weight
+				// ideally, this will prevent creation of paths containing illegal nodes
+				// if not possible, path will not be returned
 				if(set_unmanaged.has(current_node) || set_unmanaged.has(next_node)) {
-					weight = this.count_nodes
+					weight = this.count_nodes * (this.count_nodes - 1) / 2
 				}
 				if(next_node in shortest_paths == false) {
 					shortest_paths[next_node] = [current_node, weight]
@@ -438,6 +510,8 @@ class Graph {
 			path.unshift(current_node)
 			current_node = next_node
 		}
+		// check that unmanaged devices are not on the path
+		// only return path if all devices are managed
 		var flag_noUnmanaged = true
 		path.forEach(device_id => {
 			if(set_unmanaged.has(device_id)) {
