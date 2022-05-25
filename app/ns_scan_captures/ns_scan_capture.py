@@ -298,6 +298,8 @@ def primary_scan(customer, timestamp):
 
 	# set parent nodes
 	# in regards to path from node to ToR
+	# save ports used on path from source to ToR for crosslink purposes
+	dict_path = {}
 	for device_id in capture_devices:
 		if capture_devices[device_id]['is_tor'] == False:
 			site_id = capture_devices[device_id]['site_id']
@@ -308,7 +310,24 @@ def primary_scan(customer, timestamp):
 				list_pairs = graph.get_pairs_fabric(source_id, target_id)
 				capture_devices[device_id]['expected_parent_id'] = target_id
 				capture_devices[device_id]['expected_parent_intf'] = list_pairs
+				for i in range(len(path) - 1):
+					source_id = path[i]
+					target_id = path[i + 1]
+					if source_id not in dict_path:
+						dict_path[source_id] = set()
+					if target_id not in dict_path:
+						dict_path[target_id] = set()
+					list_pairs = graph.get_pairs_fabric(source_id, target_id)
+					for pair in list_pairs:
+						dict_path[source_id].add(pair[0])
+						dict_path[target_id].add(pair[1])
 			#print(graph.path_toTOR(site_id, device_id))
+	
+	"""print('test')
+	print(dict_path)
+	for device_id in dict_path:
+		dict_path[device_id] = sorted(dict_path[device_id])
+	print(json.dumps(dict_path, indent=4))"""
 
 	# determine paths from noRoute to gateway sites
 	list_path_gatewaySite = []
@@ -423,6 +442,16 @@ def primary_scan(customer, timestamp):
 			if access_vlan != None and connected == True and 'port_type' not in port:
 				set_intf_portType(device_id, port_id, 'eth_port', capture_devices)
 
+	# after everything is done, set crosslinks
+	#		port must be a fabric port
+	#		port has is not in the list of paths
+	for device_id in capture_devices:
+		for port_id in capture_devices[device_id]['ivn_port']:
+			port = capture_devices[device_id]['ivn_port'][port_id]
+			if port_id not in dict_path[device_id]:
+				if 'port_type' in port and port['port_type'] == 'fabric':
+					set_intf_portType(device_id, port_id, 'crosslink', capture_devices)
+
 	# if vlans are not unique per site, then vlans are applied everywhere
 	# in this situation, the site_id is always considered "GLOBAL"
 	dict_services = {}
@@ -459,7 +488,7 @@ def primary_scan(customer, timestamp):
 	list_portSetting = []
 	#list_existingSetting = []
 	path_existing = PATH_CUSTOMER_PRIMARY.format(customer, timestamp)
-	index_portSetting = 0
+	index_portSetting = 1
 	with open(os.path.join(path_existing, 'port-settings.json'), 'r') as file:
 		list_portSetting = json.load(file)
 		if len(list_portSetting) > 0:
@@ -514,7 +543,7 @@ def primary_scan(customer, timestamp):
 	# define and get port profiles (existing and new)
 	list_portProfile = []
 	path_existing = PATH_CUSTOMER_PRIMARY.format(customer, timestamp)
-	index_portProfile = 0
+	index_portProfile = 1
 	with open(os.path.join(path_existing, 'port-profiles.json'), 'r') as file:
 		# at this point, all profiles that previously existed will be present
 		# existing profiles are sorted in ascending order of 'port_profile_id'
@@ -541,19 +570,24 @@ def primary_scan(customer, timestamp):
 					site_id = 'GLOBAL'
 				site_id = site_id if port['port_type'] != 'layer3' else None
 				set_vlanCurrent = get_setVLAN(port)
+				if port['port_type'] == 'crosslink':
+					set_vlanCurrent = set()
+				#print(set_vlanCurrent)
 				port_profile_id = None
 				# compare site_id, port_type, vlans against all profiles that currently exist
 				# if found, use vlan id of that existing profile
 				# otherwise, create new profile and increment port_profile_id
 				for profile in list_portProfile:
-					set_vlanExist = get_setVLAN(profile)
+					#set_vlanExist = get_setVLAN(profile)
 					same_type = profile['port_type'] == port_type
-					same_vlan = set_vlanExist == set_vlanCurrent
+					same_vlan = get_setVLAN(profile) == set_vlanCurrent
 					same_site = profile['site_id'] == site_id
 					if same_type and same_vlan and same_site:
 						port_profile_id = profile['port_profile_id']
+						#print('\t', str(port_profile_id), '\t', str(get_setVLAN(profile)))
 				if not port_profile_id:
 					port_profile_id = len(list_portProfile) + index_portProfile
+					#print('\t\t', str(port_profile_id))
 					list_portProfile.append({
 						"port_profile_id": port_profile_id,
 						"port_profile_name": None,
