@@ -30,6 +30,9 @@
 			option {
 				font-size: 150%;
 			}
+			select {
+				overflow-x: scroll;
+			}
 		</style>
 	</head>
 	<body>
@@ -179,7 +182,7 @@
 				var timestamp = data[customer][i]['timestamp']
 				var save_name = data[customer][i]['save_name']
 				var option = document.createElement('option')
-				option.text = `${save_name} (${timestamp})`
+				option.text = `${timestamp} - ${save_name}`
 				option.value = timestamp
 				select_saves.add(option)
 				/*list_saves.push({
