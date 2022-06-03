@@ -448,7 +448,7 @@ def primary_scan(customer, timestamp):
 	for device_id in capture_devices:
 		for port_id in capture_devices[device_id]['ivn_port']:
 			port = capture_devices[device_id]['ivn_port'][port_id]
-			if port_id not in dict_path[device_id]:
+			if device_id in dict_path and port_id not in dict_path[device_id]:
 				if 'port_type' in port and port['port_type'] == 'fabric':
 					set_intf_portType(device_id, port_id, 'crosslink', capture_devices)
 
