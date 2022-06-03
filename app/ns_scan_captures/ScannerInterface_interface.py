@@ -7,7 +7,7 @@ class ScannerInterface_interface(ScannerInterface):
 			ScannerInterface.__init__(self, section)
 		except:
 			super().__init__(section)
-		self.speed = None
+		self.speed = -1
 		self.format_name()
 		self.aging_time = 0
 		self.aging_type = 'absolute'
@@ -130,13 +130,13 @@ class ScannerInterface_interface(ScannerInterface):
 	def format_name(self):
 		if 'tengigabitethernet' in self.if_name:
 			self.if_name = self.if_name.replace('tengigabitethernet', 'te')
-			self.speed = 10000
+			#self.speed = 10000
 		elif 'gigabitethernet' in self.if_name:
 			self.if_name = self.if_name.replace('gigabitethernet', 'gi')
-			self.speed = 1000
+			#self.speed = 1000
 		elif 'fastethernet':
 			self.if_name = self.if_name.replace('fastethernet', 'fa')
-			self.speed = 100
+			#self.speed = 100
 
 	def set_portSecurity_agingTime(self, line):
 		is_portSecurity_agingTime = re.compile(r'switchport port-security aging time (\d+)')
