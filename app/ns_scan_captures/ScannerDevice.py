@@ -99,6 +99,7 @@ class ScannerDevice:
 			list_foundMAC = interface['list_foundMAC']
 			channel_group = interface['channel_group']
 			connected = interface['connected']
+			description = interface['description']
 			#is_eth = True if access_vlan != None and connected == True else False
 			dict_[if_name] = {
 				'if_name': if_name,
@@ -109,6 +110,7 @@ class ScannerDevice:
 				'list_foundMAC':  list_foundMAC,
 				'channel_group':  channel_group,
 				'connected': connected,
+				'description': description
 				#'is_eth': is_eth
 			}
 		return dict_
@@ -156,8 +158,8 @@ class ScannerDevice:
 		}
 		return dict_
 
-	def set_isTOR(self):
-		self.is_tor = True
+	def set_isTOR(self, flag):
+		self.is_tor = flag
 
 	def set_byRun(self, section_run):
 		is_hostname = re.compile(r'hostname (.+)')
@@ -169,8 +171,8 @@ class ScannerDevice:
 			match_hostname = re.match(is_hostname, line.strip())
 			if match_hostname:
 				self.hostname = match_hostname.group(1)
-				if 'core' in self.hostname.lower():
-					self.is_tor = True
+				#if 'core' in self.hostname.lower():
+				#	self.is_tor = True
 			match_domainName = re.match(is_domainName, line.strip())
 			if match_domainName:
 				self.domain_name = match_domainName.group(1)
@@ -210,3 +212,6 @@ class ScannerDevice:
 		if count_vlan == 0 and self.is_layer3 == True:
 			self.is_router = True
 			self.is_managed = False
+
+	def set_isManaged(self, flag):
+		self.is_managed = flag
