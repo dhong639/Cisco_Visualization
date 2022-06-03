@@ -34,6 +34,7 @@ def makeImport_service(dict_service, path_out, version, date):
 		for vlan_id in dict_service[site_id]:
 			for vlan_name in dict_service[site_id][vlan_id]:
 				is_mgmt = dict_service[site_id][vlan_id][vlan_name]['management']
+				dict_ = {}
 				dict_ = {
 					'NAME': vlan_name,
 					'ENABLED': 'TRUE',
@@ -42,18 +43,21 @@ def makeImport_service(dict_service, path_out, version, date):
 					'RATE LIMIT OUT': None,
 					'PACKET PRIORITY': 7 if is_mgmt == True else 0,
 					'MULTICAST MODE': 'flooding',
-					'IS MULTICAST QUERIER': 'FALSE',
-					'IS MANAGEMENT': 'TRUE' if is_mgmt == True else 'FALSE',
-					'REMARK PACKETS': 'TRUE' if is_mgmt == True else 'FALSE',
-					'IS TLS': 'FALSE',
-					'LOCAL SWITCHING': 'TRUE',
-					'SUMMARY': 'TRUE',
-					'BLOCK DHCP SERVER': 'TRUE' if is_mgmt == True else 'FALSE',
-					'WARN ON NO EXTERN': 'FALSE'
+					'IS MULTICAST QUERIER': False,
+					'IS MANAGEMENT': is_mgmt,
+					'REMARK PACKETS': is_mgmt,
+					'IS TLS': False,
+					'LOCAL SWITCHING': True,
+					'SUMMARY': True,
+					'BLOCK DHCP SERVER': is_mgmt,
+					'WARN ON NO EXTERN': False
 				}
+				for key in dict_.keys():
+					if key in dict_service[site_id][vlan_id][vlan_name]:
+						dict_[key] = dict_service[site_id][vlan_id][vlan_name][key]
 				data.append(dict_)
 	# write to output file
-	with open(path_out, 'w') as file:
+	with open(path_out, 'w', newline='') as file:
 		writer = csv.writer(file)
 		writer.writerow(listHeader1)
 		writer = csv.DictWriter(file, listHeader2)
