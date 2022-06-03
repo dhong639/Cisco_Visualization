@@ -2,6 +2,7 @@ class Graph:
 	def __init__(self, count, set_siteGateway, dict_site2device, dict_edgeFabric, dict_edgeOther):
 		# device information, group key devices by site
 		self.count = count
+		self.dict_device2site = {}
 		self.dict_site2device = dict_site2device
 		self.set_unmanaged_all = set()
 		self.set_unmanaged_layer3 = set()
@@ -15,6 +16,7 @@ class Graph:
 			self.set_unmanaged_all = self.set_unmanaged_all.union(set_other)
 			self.set_unmanaged_layer3 = self.set_unmanaged_layer3.union(set_router)
 			self.set_unmanaged_other = self.set_unmanaged_other.union(set_other)
+
 
 		# site information, determine source and target sites
 		self.set_siteGateway = set_siteGateway
@@ -34,6 +36,15 @@ class Graph:
 				len_pairs = len(dict_edgeFabric[source_id][target_id]['pairs'])
 				self.dict_weights[source_id][target_id] = 1 / len_pairs
 
+	def get_targetsTOR(self, tor_id):
+		dict_targetsTOR = {}
+		for device_id in self.dict_edgeFabric[tor_id]:
+			if device_id not in dict_targetsTOR:
+				dict_targetsTOR[device_id] = []
+			for pair in self.dict_edgeFabric[tor_id][device_id]['pairs']:
+				dict_targetsTOR[device_id].append(pair)
+		return dict_targetsTOR
+
 	def get_pairs_fabric(self, source_id, target_id):
 		if source_id in self.set_unmanaged_all or target_id in self.set_unmanaged_all:
 			return None
@@ -48,7 +59,9 @@ class Graph:
 			return None
 		if device_id not in self.dict_edgeOther:
 			return None
-		list_eth = [port for port in self.dict_edgeOther[device_id]['eth_port']]
+		list_eth = [port[1] for port in self.dict_edgeOther[device_id]['eth_port']]
+		print(device_id)
+		print(list_eth)
 		if device_id in self.dict_edgeFabric:
 			for target_id in self.dict_edgeFabric[device_id]:
 				if target_id in self.set_unmanaged_other:
@@ -60,7 +73,7 @@ class Graph:
 			return None
 		if device_id not in self.dict_edgeOther:
 			return None
-		list_layer3 = [port for port in self.dict_edgeOther[device_id]['layer3']]
+		list_layer3 = [port[1] for port in self.dict_edgeOther[device_id]['layer3']]
 		if device_id in self.dict_edgeFabric:
 			for target_id in self.dict_edgeFabric[device_id]:
 				if target_id in self.set_unmanaged_other:
@@ -120,7 +133,7 @@ class Graph:
 					current_shortestWeight = shortest_paths[next_node][1]
 					if current_shortestWeight > weight:
 						shortest_paths[next_node] = [current_node, weight]
-			
+
 			next_destinations = {}
 			for node in shortest_paths:
 				if node not in visited:
@@ -128,7 +141,7 @@ class Graph:
 
 			if len(next_destinations.keys()) == 0:
 				return None
-			
+
 			lowestWeight = float('inf')
 			for key in next_destinations:
 				node = next_destinations[key]
@@ -136,7 +149,7 @@ class Graph:
 				if weight < lowestWeight:
 					lowestWeight = weight
 					current_node = key
-		
+
 		path = []
 		while current_node != None:
 			next_node = shortest_paths[current_node][0]
