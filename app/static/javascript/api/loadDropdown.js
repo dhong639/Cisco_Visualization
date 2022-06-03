@@ -57,6 +57,7 @@ function fillSelect_deviceID(set_currentSite) {
 	document.getElementById('show_detail_trunk').innerHTML = ''
 	document.getElementById('show_detail_voice').innerHTML = ''
 	document.getElementById('show_detail_foundMAC').innerHTML = ''
+	document.getElementById('show_description_interface').innerHTML = ''
 
 	var site_id = document.getElementById("select_siteView").value
 	// if site_id is set to (None), delete everything in the set
@@ -108,6 +109,7 @@ function fillSelect_intf() {
 	document.getElementById('show_detail_trunk').innerHTML = ''
 	document.getElementById('show_detail_voice').innerHTML = ''
 	document.getElementById('show_detail_foundMAC').innerHTML = ''
+	document.getElementById('show_description_interface').innerHTML = ''
 
 	// set displayed hostname
 	var device_id = document.getElementById("select_detail_hostname").value
@@ -135,6 +137,8 @@ function update_details() {
 		document.getElementById('show_detail_voice').innerHTML = interface['voice_vlan']
 		var list_foundMAC = interface['list_foundMAC'].join('<br />')
 		document.getElementById('show_detail_foundMAC').innerHTML = list_foundMAC
+		var description = interface['description']
+		document.getElementById('show_description_interface').innerHTML =  description
 	}
 }
 
