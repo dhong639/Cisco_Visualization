@@ -82,7 +82,7 @@ def post_loadSave():
 		# note to self: only make new directories if customer actually uploads something
 		# after making directories, generate the prescan files
 		if flag_new:
-			timestamp = datetime.datetime.now().strftime('%Y-%m-%d_%H:%M:%S.%f')
+			timestamp = datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S.%f')
 			if not customer:
 				customer = 'default_name'
 			if not os.path.exists(PATH_CUSTOMER.format(customer)):
@@ -140,13 +140,21 @@ def post_network_files(customer, timestamp):
 				'list_tor': [],
 				'list_unmanaged': [],
 				'list_site_gateway': [],
-				'list_site_ignored': []
+				'list_site_ignored': [],
+				'dict_serviceUp': {},
+				'sdlc': request.form['sdlc'],
+				'enable': request.form['enable'],
+				'ssh_username': request.form['ssh_username'],
+				'ssh_password': request.form['ssh_password']
 			}
 			with open(PATH_CUSTOMER_SAVE_DETAILS.format(customer, timestamp), 'w') as file:
 				json.dump(dict_details, file, indent=4)
 
 		# convert services list into json format keyed by id
 		# ignore if input is empty
+		#		only occurs for new customers
+		#		results will be overriden by a service import if one is found
+		# 'input_service' is not the same as 'import_service'
 		dict_services = {}
 		path_services = PATH_CUSTOMER_SAVE_SERVICE.format(customer, timestamp)
 		if os.path.exists(path_services):
@@ -156,9 +164,12 @@ def post_network_files(customer, timestamp):
 			file_services = request.files['input_service']
 			string_services = file_services.read().decode('utf-8')
 			for row in csv.DictReader(string_services.splitlines(), skipinitialspace=True):
-				print(row)
 				dict_ = {k.lower().replace(' ', '_'): v.strip() for k, v in row.items()}
-
+				# determine if vlan belongs to a site
+				#		some customers will upload services on a site-by-site basis
+				#		other customers will upload services that apply for all sites
+				# information used for names
+				# information used to determine context of vlan
 				site_id = dict_['site_id'].strip() if 'site_id' in dict_ else 'GLOBAL'
 				if site_id not in dict_services:
 					dict_services[site_id] = {}
@@ -171,8 +182,9 @@ def post_network_files(customer, timestamp):
 				if 'management' in dict_:
 					is_management = json.loads(dict_['management'].lower())
 					dict_services[site_id][vlan][dict_['name']]['management'] = is_management
-				#dict_services[site_id][int(dict_['vlan'].strip())] = service
 
+		# convert service import into json format keyed by id and name
+		# either 'input_service' or 'import_service' must be present
 		list_service = []
 		if request.files['import_service']:
 			# reset dict_services even if a new service input was provided
@@ -183,17 +195,27 @@ def post_network_files(customer, timestamp):
 			for row in csv.DictReader(string_services, skipinitialspace=True):
 				list_service.append(row)
 
-		# check for existing profiles and settings
+		# check for existing profiles, requires service export from existing site
 		# create blank files if empty
-		path_primary = PATH_CUSTOMER_PRIMARY.format(customer, timestamp)
-		# results for port profiles, requires service export from existing site
+		# load existing file contents if applicable
 		output_portProfiles = []
+		path_primary = PATH_CUSTOMER_PRIMARY.format(customer, timestamp)
+		if os.path.exists(os.path.join(path_primary, 'port-profiles.json')):
+			with open(os.path.join(path_primary, 'port-profiles.json'), 'r') as file:
+				output_portProfiles = json.load(file)
+		# service import and eth port import are not differentiated in 'port-profiles.json'
+		#		the order in which they are uploaded does not actually matter
+		# this section guesses which services are associated with the profiles
 		for input_portProfiles in ['import_portProfiles_service', 'import_portProfiles_eth']:
 			if request.files[input_portProfiles] and list_service:
 				file_portProfiles = request.files[input_portProfiles]
 				string_portProfiles = file_portProfiles.read().decode('utf-8').splitlines()
 				readCSV = csv.reader(string_portProfiles, delimiter=',')
 				contents = list(readCSV)
+				# import file contains two headers
+				#		1st header marks where each service occurs
+				#		2nd header marks information specific to each service
+				# get each index that marks a new service
 				is_indexService = re.compile(r'SERVICE (\d+)')
 				list_indexService = []
 				for i in range(len(contents[0])):
@@ -208,6 +230,9 @@ def post_network_files(customer, timestamp):
 				for i in range(2, len(contents)):
 					row = contents[i]
 					name = contents[i][index_name]
+					# determine port type
+					#		names determined by previous version of ns_scan_capture
+					#		may be ideal to change to match csv import file headers
 					port_type = 'eth_port'
 					if index_serviceDirection:
 						if row[index_serviceDirection] == 'cross':
@@ -218,18 +243,24 @@ def post_network_files(customer, timestamp):
 							port_type = 'service_down'
 						elif row[index_serviceDirection] == 'no_switchport':
 							port_type = 'layer3'
+					# determine services used in the profiles
+					#		make assumption that all services will eventually be used
+					#		guess that each service name is mapped to some vlan id
+					#		attempt to avoid duplicate vlan ids (mutliple names per vlan)
+					# each time a service is found, add to list of services on given profile
 					list_existing_serviceID = []
 					for index in list_indexService:
 						index_service = index
 						if input_portProfiles == 'import_portProfiles_eth':
 							index_service += 1 
 						if row[index_service]:
-							if input_portProfiles == 'import_portProfiles_eth':
-								print('looking at %s: ' % row[index_service])
 							for service in list_service:
 								service_name = service['NAME']
 								service_id = int(service['VLAN'])
 								if service_name == row[index_service]:
+									# by default, only 'GLOBAL' services are possible
+									# site-specific services only allowed for new imports
+									# would require a 'site_id' column in GUI export csv files
 									list_existing_serviceID.append(int(service_id))
 									if 'GLOBAL' not in dict_services:
 										dict_services['GLOBAL'] = {}
@@ -238,6 +269,9 @@ def post_network_files(customer, timestamp):
 									if service_name not in dict_services['GLOBAL'][service_id]:
 										dict_services['GLOBAL'][service_id][service_name] = {}
 									dict_services['GLOBAL'][service_id][service_name]['base'] = True
+									for key in service:
+										value = service[key]
+										dict_services['GLOBAL'][service_id][service_name][key] = value
 					output_portProfiles.append({
 						'port_profile_id': i - 1,
 						'site_id': 'GLOBAL',
@@ -249,43 +283,48 @@ def post_network_files(customer, timestamp):
 						'trunk_list': [],
 						'native_vlan': None,
 					})
-
 		with open(os.path.join(path_primary, 'port-profiles.json'), 'w') as file:
 			json.dump(output_portProfiles, file, indent=4)
+
 		# results for port settings
+		# load existing file contents if applicable
 		output_portSettings = []
-		if request.files['input_portSettings'] and list_service:
-			file_portSettings = request.files['input_portSettings']
+		if os.path.exists(os.path.join(path_primary, 'port-settings.json')):
+			with open(os.path.join(path_primary, 'port-settings.json'), 'r') as file:
+				output_portSettings = json.load(file)
+		if request.files['import_portSettings'] and list_service:
+			file_portSettings = request.files['import_portSettings']
 			string_portSettings = file_portSettings.read().decode('utf-8')
 			port_setting_id = 0
 			for row in csv.DictReader(string_portSettings.splitlines()[1:], skipinitialspace=True):
 				port_setting_id += 1
+				# these are the last two columns in a port settings export
+				# get rid of them, not needed and will otherwise causes errors
 				if 'DO NOT EDIT PAST HERE' in row:
 					del row['DO NOT EDIT PAST HERE']
 				if 'OVERRIDDEN OBJECT' in row:
 					del row['OVERRIDDEN OBJECT']
 				if '' in row:
 					del row['']
-				#print(json.dumps(row, indent=4))
-				#row = {key.lower(): row[key] for key in row}
+				# as with other services, search for voice vlan by name
+				# only exists as a 'GLOBAL' service
 				lldp_voice_vlan = None
 				if row['LLDP MED SERVICE NAME']:
 					service_name = row['LLDP MED SERVICE NAME']
-					#print(service_name)
 					for service in list_service:
-						#print('\t' + service['NAME'])
 						service_id = int(service['VLAN'])
 						if service_name == service['NAME']:
-							#print('\t\tfire')
 							if 'GLOBAL' not in dict_services:
 								dict_services['GLOBAL'] = {}
 							if service_id not in dict_services['GLOBAL']:
 								dict_services['GLOBAL'][service_id] = {}
 							if service_name not in dict_services['GLOBAL'][service_id]:
 								dict_services['GLOBAL'][service_id][service_name] = {}
+							for key in service:
+								value = service[key]
+								dict_services['GLOBAL'][service_id][service_name][key] = value
 							dict_services['GLOBAL'][service_id][service_name]['base'] = True
 							lldp_voice_vlan = int(service['VLAN'])
-				#print(lldp_voice_vlan)
 				output_portSettings.append({
 					"voice_vlan": ['GLOBAL', lldp_voice_vlan] if lldp_voice_vlan else None,
 					"stp_portfast": True if row['STP ENABLED'] == 'TRUE' else False,
@@ -303,9 +342,27 @@ def post_network_files(customer, timestamp):
 					"port_setting_id": port_setting_id,
 					"port_setting_name": row['NAME']
 				})
-				#print(json.dumps(row, indent=4))
 		with open(os.path.join(path_primary, 'port-settings.json'), 'w') as file:
 			json.dump(output_portSettings, file, indent=4)
+
+		# to try and intelligently choose services, services already in use are added first
+		# however, not all services are inherently used in the given import files
+		# in that situation, choose the first available service for a vlan ID and add to import
+		# for obvious reason, requires 'import_service'
+		if request.files['import_service']:
+			for service in list_service:
+				if 'GLOBAL' not in dict_services:
+					dict_services['GLOBAL'] = {}
+				vlan_id = int(service['VLAN'])
+				# only the first recorded service for the number is added
+				# 'GLOBAL' is the only possible site_id for existing service imports
+				if vlan_id not in dict_services['GLOBAL']:
+					service_name = service['NAME']
+					dict_services['GLOBAL'][vlan_id] = {}
+					dict_services['GLOBAL'][vlan_id][service_name] = {}
+					for key in service:
+						dict_services['GLOBAL'][vlan_id][service_name][key] = service[key]
+					dict_services['GLOBAL'][vlan_id][service_name]['base'] = True
 
 		# convert hardware list into dictionary for later use
 		# note that each device log must have a corresponding hardware row
@@ -319,21 +376,20 @@ def post_network_files(customer, timestamp):
 			flag_prescan = True
 			file_hardware = request.files['input_hardware']
 			string_hardware = file_hardware.read().decode('utf-8')
-			#print(string_hardware)
 			for row in csv.DictReader(string_hardware.splitlines(), skipinitialspace=True):
-				#print(row)
 				hardware = {k.lower().replace(' ', '_'): v.strip() for k, v in row.items()}
 				hardware['site_id'] = hardware['site_id']
 				key = hardware['hostname'].upper()
-				#print(hardware)
 				dict_hardware[key] = hardware
-			
-			#print(json.dumps(dict_hardware, indent=4))
 
 			# write new rows to 'hardware-list.json'
 			with open(path_hardware, 'w') as file:
 				json.dump(dict_hardware, file, indent=4)
 
+		# store missing services
+		# each service should only be recorded once per vlan id
+		# names will be determined by the what type the service is (access, trunk, voice)
+		dict_missing = {}
 		# convert log files into json format keyed by device id, include hardware information
 		# if not possible, treat site as 'GLOBAL', which is a default site id
 		for file in request.files.getlist('input_listLogs'):
@@ -355,21 +411,40 @@ def post_network_files(customer, timestamp):
 				site_id = section.get_siteID()
 				if set(dict_services.keys()) == set(['GLOBAL']):
 					site_id = 'GLOBAL'
-				#print(json.dumps(section.get_vlanMissing(dict_services), indent=4))
-				for vlan in section.get_vlanMissing(dict_services):
-					vlan_id = int(vlan['vlan'])
-					vlan_name = vlan['name']
-					if site_id not in dict_services:
-						dict_services[site_id] = {}
-					if vlan_id not in dict_services[site_id]:
-						dict_services[site_id][vlan_id] = {}
-					if vlan_name not in dict_services[site_id][vlan_id]:
-						dict_services[site_id][vlan_id][vlan_name] = {}
-					dict_services[site_id][vlan_id][vlan_name] = vlan
-
+				dict_missing_current = section.get_vlanMissing(dict_services)
+				for site_id in dict_missing_current:
+					if site_id not in dict_missing:
+						dict_missing[site_id] = {}
+					for vlan_id in dict_missing_current[site_id]:
+						if vlan_id not in dict_missing[site_id]:
+							dict_missing[site_id][vlan_id] = []
+						for type_ in dict_missing_current[site_id][vlan_id]:
+							if type_ not in dict_missing[site_id][vlan_id]:
+								dict_missing[site_id][vlan_id].append(type_)
+						dict_missing[site_id][vlan_id].sort()
 				# will overwrite files if already exist
 				with open(path_file, 'w') as file:
 					json.dump(section.get_dict_all(), file, indent=4)
+		
+		#print(json.dumps(dict_missing, indent=4))
+		for site_id in dict_missing:
+			if site_id not in dict_services:
+				dict_services[site_id] = {}
+			for vlan_id in dict_missing[site_id]:
+				# by definition, missing services don't exist
+				# therefore, no need to check for service_names
+				if vlan_id not in dict_services[site_id]:
+					name = str(vlan_id) + '_' + site_id
+					if len(dict_missing[site_id][vlan_id]) == 1:
+						name += ' - ' + dict_missing[site_id][vlan_id][0]
+					dict_services[site_id][vlan_id] = {}
+					dict_services[site_id][vlan_id][name] = {
+						'name': name,
+						'vlan': vlan_id,
+						'type': dict_missing[site_id][vlan_id],
+						'site': site_id,
+						'base': False
+					}
 
 		# write to dict_services after everything is done
 		with open(path_services, 'w') as file:
@@ -419,6 +494,7 @@ def post_preview_topology(customer, timestamp):
 			set_unmanaged = set(dict_details['list_unmanaged'])
 			set_site_gateway = set(dict_details['list_site_gateway'])
 			set_site_ignored = set(dict_details['list_site_ignored'])
+			dict_serviceUp = dict_details['dict_serviceUp']
 		
 		dict_devices = {}
 		path_prescan = PATH_CUSTOMER_PRESCAN.format(customer, timestamp)
@@ -496,6 +572,7 @@ def get_preview_topology(customer, timestamp):
 @app.route('/<customer>/<timestamp>/save-edits/<flag>', methods=['POST'])
 def save_topology_edits(customer, timestamp, flag):
 	if request.method == 'POST':
+		print(request.form['pending_serviceUp'])
 		flag = int(flag)
 		# customer wants to delete their current topology
 		# remove all files within customer save subdirectory
@@ -509,16 +586,42 @@ def save_topology_edits(customer, timestamp, flag):
 			dict_details = json.load(file)
 		for key in ['list_tor', 'list_unmanaged', 'list_site_gateway', 'list_site_ignored']:
 			if request.form[key]:
-				dict_details[key] = request.form[key].split('|')
+				dict_details[key] = json.loads(request.form[key])
 			else:
 				dict_details[key] = []
+		dict_details['dict_serviceUp'] = json.loads(request.form['pending_serviceUp'])
 		with open(PATH_CUSTOMER_SAVE_DETAILS.format(customer, timestamp), 'w') as file:
 			json.dump(dict_details, file, indent=4)
 		if flag:
 			return redirect(url_for('get_login'))
 		else:
+			path_prescan = PATH_CUSTOMER_PRESCAN.format(customer, timestamp)
+			dict_serviceUp = dict_details['dict_serviceUp']
+			dict_edgesOther = {}
+			with open(os.path.join(path_prescan, 'graph_other.json'), 'r') as file:
+				dict_edgesOther = json.load(file)
+			for device_id in dict_serviceUp:
+				for interface_id in dict_serviceUp[device_id]:
+					dict_edgesOther[device_id]['layer3'].append([
+						'undefined_serviceUplink',
+						interface_id
+					])
+			with open(os.path.join(path_prescan, 'graph_other.json'), 'w') as file:
+				json.dump(dict_edgesOther, file, indent=4)
 			primary_scan(customer, timestamp)
-			return redirect(url_for('get_output', customer=customer, timestamp=timestamp))
+			return redirect(url_for('get_provisioning_confirm', customer=customer, timestamp=timestamp))
+
+
+@app.route('/<customer>/<timestamp>/confirm-provisioning', methods=['GET'])
+def get_provisioning_confirm(customer, timestamp):
+	path_primary = PATH_CUSTOMER_PRIMARY.format(customer, timestamp)
+	list_profiles = []
+	with open(os.path.join(path_primary, 'port-profiles.json'), 'r') as file:
+		list_profiles = [profile for profile in json.load(file) if not profile['port_profile_name']]
+	list_settings = []
+	with open(os.path.join(path_primary, 'port-settings.json'), 'r') as file:
+		list_settings = [setting for setting in json.load(file) if not setting['port_setting_name']]
+	return render_template('confirm-provisioning.html', customer=customer, timestamp=timestamp, list_profiles=list_profiles, list_settings=list_settings)
 
 
 @app.route('/<customer>/<timestamp>/output', methods=['GET'])
@@ -546,11 +649,11 @@ def get_captureOutput(customer, timestamp):
 @app.route('/<customer>/<timestamp>/output/get_service_import', methods=['POST'])
 def get_service_import(customer, timestamp):
 	if request.method == 'POST':
+		incremental = bool(request.form.get('incremental_service'))
 		# path to file for writing
 		path_out = PATH_DOWNLOAD_DUMP.format('1. Service Import.csv')
 		# create and download '1. Service Import.csv'
-		load_service_import(customer, timestamp, path_out)
-		print(path_out)
+		load_service_import(customer, timestamp, path_out, incremental)
 		return send_file(path_out, as_attachment=True)
 
 
@@ -568,10 +671,11 @@ def get_site_import(customer, timestamp):
 def get_servicePort_import(customer, timestamp):
 	if request.method == 'POST':
 		print('running {} get_servicePort_import...'.format(customer))
+		incremental = bool(request.form.get('incremental_servicePort'))
 		# path to file for writing
 		path_out = PATH_DOWNLOAD_DUMP.format('3. Service Ports Import.csv')
 		# create and download '3. Service Ports Import.csv'
-		load_servicePort_import(customer, timestamp, path_out)
+		load_servicePort_import(customer, timestamp, path_out, incremental)
 		return send_file(path_out, as_attachment=True)
 
 
@@ -579,10 +683,11 @@ def get_servicePort_import(customer, timestamp):
 def get_ethPort_import(customer, timestamp):
 	if request.method == 'POST':
 		print('running {} get_ethPort_import...'.format(customer))
+		incremental = bool(request.form.get('incremental_ethPort'))
 		# path to file for writing
 		path_out = PATH_DOWNLOAD_DUMP.format('4. Eth-Port Profiles Import.csv')
 		# create and download '4. Eth-Port Profiles Import.csv'
-		load_ethPort_import(customer, timestamp, path_out)
+		load_ethPort_import(customer, timestamp, path_out, incremental)
 		return send_file(path_out, as_attachment=True)
 
 
@@ -590,10 +695,11 @@ def get_ethPort_import(customer, timestamp):
 def get_portSettings_import(customer, timestamp):
 	if request.method == 'POST':
 		print('running {} get_portSettings_import...'.format(customer))
+		incremental = bool(request.form.get('incremental_settings'))
 		# path to file for writing
 		path_out = PATH_DOWNLOAD_DUMP.format('5. Eth-Port Settings Import.csv')
 		# create and download '5. Eth-Port Settings Import.csv'
-		load_portSettings_import(customer, timestamp, path_out)
+		load_portSettings_import(customer, timestamp, path_out, incremental)
 		return send_file(path_out, as_attachment=True)
 
 
@@ -645,13 +751,20 @@ def get_bundles_import(customer, timestamp):
 def get_controllers_import(customer, timestamp):
 	if request.method == 'POST':
 		print('running {} get_controllers_import...'.format(customer))
+
+		dict_details = {}
+		path_prescan = PATH_CUSTOMER_PRESCAN.format(customer, timestamp)
+		with open(os.path.join(path_prescan, 'details.json'), 'r') as file:
+			dict_details = json.load(file)
 		# get controller name
-		sdlc = request.form['sdlc']
+		sdlc = dict_details['sdlc']
+		# get enable password
+		enable = dict_details['enable']
 		# get ssh login information
-		ssh_username = request.form['ssh_username']
-		ssh_password = request.form['ssh_password']
+		ssh_username = dict_details['ssh_username']
+		ssh_password = dict_details['ssh_password']
 		# path to file for writing
 		path_out = PATH_DOWNLOAD_DUMP.format('10. Controllers Import.csv')
 		# create and download '10. Controllers Import.csv'
-		load_controllers_import(customer, timestamp, path_out, sdlc, ssh_username, ssh_password)
+		load_controllers_import(customer, timestamp, path_out, sdlc, enable, ssh_username, ssh_password)
 		return send_file(path_out, as_attachment=True)
