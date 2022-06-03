@@ -9,6 +9,7 @@ from .processInput import pad_header1
 from .processInput import fill_header2
 from .processInput import output_csv
 from .processInput import is_none
+from .processInput import get_nameLAG
 
 
 # makeImport_bundle
@@ -166,6 +167,12 @@ def makeImport_bundle(dict_device, list_portProfile, list_portSetting, maxPortCo
 					row[index] = None
 				elif portType == 'eth_port':
 					row[index] = 'eth_port'
+				#elif portType == 'service_up':
+				#	row[index] = 'up'
+				#elif portType == 'service_down':
+				#	row[index] = 'down'
+				#elif portType == 'layer3':
+				#	row[index] = 'no_switchport'
 				else:
 					row[index] = 'service_port'
 			#	port profile id
@@ -174,7 +181,11 @@ def makeImport_bundle(dict_device, list_portProfile, list_portSetting, maxPortCo
 			#		if profile id exists
 			#			find profile and set to given name
 			if isLAG:
-				if 'site_id' in device.keys():
+				site_id = device['site_id']
+				channel_id = str(port['channel_group'])
+				name_lag = get_nameLAG(site_id, device_id, channel_id, False)
+				row[index + 1] = name_lag
+				"""if 'site_id' in device.keys():
 					if 'port_type' in port and port['port_type'] == 'crosslink':
 						site_id = device['site_id']
 						if site_id != None:
@@ -190,7 +201,7 @@ def makeImport_bundle(dict_device, list_portProfile, list_portSetting, maxPortCo
 							row[index + 1] = 'unknown port-channel' + channel_id
 				else:
 					print('\tWarning: site ID not found (%s)' % device['hostname'])
-					row[index + 1] = 'unknown TOR Pair'
+					row[index + 1] = 'unknown TOR Pair'"""
 			elif 'port_profile_id' in port.keys():
 				profileID = port['port_profile_id']
 				if is_none(profileID) is False:
@@ -204,8 +215,8 @@ def makeImport_bundle(dict_device, list_portProfile, list_portSetting, maxPortCo
 				settingID = port['port_setting_id']
 				if is_none(settingID) is False:
 					indexSetting = list_portSettingID.index(settingID)
-					if list_portSetting[indexSetting]['poe_enabled'] == True:
-						row[indexDeviceSettings] = 'PoE Device Default'
+					#if list_portSetting[indexSetting]['poe_enabled'] == True:
+					#	row[indexDeviceSettings] = 'PoE Device Default'
 					row[index + 2] = list_portSetting[indexSetting]['port_setting_name']
 				else:
 					print('\tWarning: setting ID missing (%s)' % device['hostname'])
