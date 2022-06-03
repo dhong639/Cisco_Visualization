@@ -1,4 +1,5 @@
 import re
+import json
 
 class Sections:
 	def __init__(self, file, privileged):
@@ -327,44 +328,41 @@ class Sections:
 
 
 	def get_vlanMissing(self, dict_services):
-		#print(dict_services.keys())
-		list_missing = []
+		dict_missing = {}
 		if 'site_id' in self.sections:
 			if 'interface config' in self.sections:
 				if 'ethernet' in self.sections['interface config']:
 					for item in self.sections['interface config']['ethernet']:
-						self.helper_get_vlanMissing(item, list_missing, dict_services)
+						self.helper_get_vlanMissing(item, dict_missing, dict_services)
 				if 'port-channel' in self.sections['interface config']:
 					for item in self.sections['interface config']['port-channel']:
-						self.helper_get_vlanMissing(item, list_missing, dict_services)
-		#return sorted(list_missing, key = lambda i: (i['vlan'], i['site'], i['type']))
-		return list_missing
-	def helper_get_vlanMissing(self, item, list_missing, dict_services):
+						self.helper_get_vlanMissing(item, dict_missing, dict_services)
+		for site_id in dict_missing:
+			for vlan_id in dict_missing[site_id]:
+				dict_missing[site_id][vlan_id] = sorted(dict_missing[site_id][vlan_id])
+		return dict_missing
+	def helper_get_vlanMissing(self, item, dict_missing, dict_services):
 		site_id = self.sections['site_id']
 		if set(dict_services.keys()) == set(['GLOBAL']):
 			site_id = 'GLOBAL'
-		#print(site_id)
+
 		for line in item:
 			line = line.strip().lower()
-			
+			# trunk vlans done first
+			# these are always recorded as a list
 			list_trunk_vlan = self.get_listTrunkVLAN(line)
 			if list_trunk_vlan:
 				for trunk_vlan in list_trunk_vlan:
 					if trunk_vlan not in dict_services[site_id]:
 						trunk_vlan = int(trunk_vlan)
-						name = '{}_trunk_{}'.format(trunk_vlan, site_id)
-						list_missing.append({
-							'name': name,
-							'vlan': trunk_vlan,
-							'type': 'trunk',
-							'site': site_id,
-							'base': False
-						})
-						"""dict_services[site_id][trunk_vlan] = {
-							"name": name,
-							"vlan": trunk_vlan
-						}"""
-			
+						if site_id not in dict_missing:
+							dict_missing[site_id] = {}
+						if trunk_vlan not in dict_missing[site_id]:
+							dict_missing[site_id][trunk_vlan] = set()
+						dict_missing[site_id][trunk_vlan].add('trunk')
+
+			# all other vlans
+			# recorded individually by logs
 			access_vlan = self.get_accessVLAN(line)
 			native_vlan = self.get_trunkNativeVLAN(line)
 			voice_vlan = self.get_voiceVLAN(line)
@@ -379,19 +377,12 @@ class Sections:
 					dict_services[site_id] = {}
 				if vlan and vlan not in dict_services[site_id]:
 					vlan = int(vlan)
-					name = '{}_{}_{}'.format(vlan, type_, site_id)
-					list_missing.append({
-							'name': name,
-							'vlan': vlan,
-							'type': type_,
-							'site': site_id,
-							'base': False
-						})
-					"""dict_services[site_id][vlan] = {
-						"name": name,
-						"vlan": vlan,
-						'base': False
-					}"""
+					if site_id not in dict_missing:
+						dict_missing[site_id] = {}
+					if vlan not in dict_missing[site_id]:
+						dict_missing[site_id][vlan] = set()
+					dict_missing[site_id][vlan].add(type_)
+
 	def get_accessVLAN(self, line):
 		is_access = re.compile(r'switchport access vlan (\d+)')
 		match_access = re.match(is_access, line)
