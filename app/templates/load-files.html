@@ -294,18 +294,18 @@
 					</div>
 				</div>
 				<hr />
-				<!--
-					Section: 
-						ToR Election
-					Contents: 
-						tor_count		how many TORs there should be
-						tor_weight		likliehood that layer3 switches are TORs
-					Function:
-						let customer determine which switches to be ToRs
-						all values set to -1 for existing saves
-						don't show if this is an existing save file
-				-->
 				{% if flag_new == "1" %}
+					<!--
+						Section: 
+							ToR Election
+						Contents: 
+							tor_count		how many TORs there should be
+							tor_weight		likliehood that layer3 switches are TORs
+						Function:
+							let customer determine which switches to be ToRs
+							all values set to -1 for existing saves
+							don't show if this is an existing save file
+					-->
 					<div class="row">
 						<div class="col-md-3">
 							<h5>ToR Election</h5>
@@ -352,6 +352,88 @@
 						</div>
 						<div class="col-md-3">
 							<input type="number" value="1.25" id="tor_weight" name="tor_weight" step="0.01" min="1" >
+						</div>
+					</div>
+					<hr />
+
+					<!--
+						Section: 
+							controller information
+						contents
+							sdlc			name of sdlc
+							enable			access device from Cisco CLI
+							ssh_username	username for ssh access
+							ssh_password	password for ssh access
+						function
+							information used to log into the controller and remotely access devices
+					-->
+					<div class="row">
+						<div class="col-md-3">
+							<h5>Controller Information</h5>
+						</div>
+						<div class="col-md-6">
+							<h5>Information to remotely access devices (optional)</h5>
+						</div>
+						<div class="col-md-3">
+							<!--TODO-->
+						</div>
+					</div>
+					<!--
+						input sdlc controller name, usernames, and passwords
+					-->
+					<div class="row">
+						<div class="col-md-3">
+							<label for="sdlc">
+								<strong>Input name of SLDC controller: </strong>
+							</label>
+						</div>
+						<div class="col-md-6">
+							<li>name will be applied to all imported devices</li>
+						</div>
+						<div class="col-md-3">
+							<input id="sdlc" name="sdlc">
+						</div>
+					</div>
+					<div class="row">
+						<div class="col-md-3">
+							<label for="ssh_username">
+								<strong>Input username for SSH access</strong>
+							</label>
+						</div>
+						<div class="col-md-6">
+							<li>used to securely remotely access device</li>
+							<li>all devices are remotely accessed via ssh</li>
+						</div>
+						<div class="col-md-3">
+							<input id="ssh_username" name="ssh_username">
+						</div>
+					</div>
+					<div class="row">
+						<div class="col-md-3">
+							<label for="ssh_password">
+								<strong>Input password for SSH access</strong>
+							</label>
+						</div>
+						<div class="col-md-6">
+							<li>verify ssh username when remotely accessing device</li>
+							<li>if not provided, cannot ssh into device</li>
+						</div>
+						<div class="col-md-3">
+							<input id="ssh_password" name="ssh_password">
+						</div>
+					</div>
+					<div class="row">
+						<div class="col-md-3">
+							<label for="enable">
+								<strong>Input enable password</strong>
+							</label>
+						</div>
+						<div class="col-md-6">
+							<li>used to enable access to CLI</li>
+							<li>if not provided, cannot edit device via Cisco command line</li>
+						</div>
+						<div class="col-md-3">
+							<input id="enable" name="enable">
 						</div>
 					</div>
 					<hr />
