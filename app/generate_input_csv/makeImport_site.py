@@ -36,7 +36,7 @@ def makeImport_site(dict_device, dict_service, path_out, version, date, link=Non
 		'ENABLED',
 		'SERVICE',
 		'DOMAIN',
-		'FABRIC SPANNING-TREE',
+		'FABRIC SPANNING TREE',
 		'SYSTEM GRAPHS',
 		'SPANNING TREE MODE',
 	]
