@@ -81,15 +81,15 @@ def set_provisioningName(provisioning, dictService, default):
 			if provisioning['port_type'] != 'eth_port':
 				provisioning[name] = provisioning[name] + ' - ' + provisioning['port_type']
 			listVLAN = get_list_vlan(provisioning)
-			print(listVLAN)
+			#print(listVLAN)
 			if len(listVLAN) == 1:
-				print('\tthis applies')
+				#print('\tthis applies')
 				if site in dictService:
 					vlan_id = str(listVLAN[0])
 					if vlan_id in dictService[site]:
 						provisioning[name] += ' - '
 						provisioning[name] += list(dictService[site][vlan_id].keys())[0]
-			print('\t' + provisioning[name])
+			#print('\t' + provisioning[name])
 		else:
 			print('\tNaming: Profile %d name exists, skip default name' % provisioning[idKey])
 	elif 'setting' in idKey:
@@ -293,7 +293,7 @@ def pad_header1(listHeader1, listHeader2):
 #		function:
 #			write processed values to csv
 def output_csv(listHeader1, listHeader2, data, fileName):
-	with open(fileName, 'w') as csvFile:
+	with open(fileName, 'w', newline='') as csvFile:
 		csvWriter = csv.writer(csvFile)
 		csvWriter.writerow(listHeader1)
 		csvWriter.writerow(listHeader2)
@@ -320,3 +320,20 @@ def format_endpointName(device):
 	else:
 		print('\tWarning: location and site were not detected (%s)' % device['hostname'])
 	return name
+
+
+def format_timestamp(input):
+	output = input.replace('_', ' ')
+	output = output[::-1].replace('-', ':', 2)
+	return output[::-1]
+
+
+def get_nameLAG(site_id, device_id, channel_number, is_tor):
+	if site_id == None:
+		print('\tWarning: site ID not found (%s)' % device_id)
+		site_id = 'unknown'
+	if is_tor == True:
+		return site_id.upper() + ' TOR Pair'
+	else:
+		return site_id.upper() + ' - ' + device_id + ' - LAG Pair ' + str(channel_number)
+	
