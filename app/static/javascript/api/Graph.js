@@ -1,434 +1,528 @@
-function invertColor(hexTripletColor) {
-	var color = hexTripletColor;
-	color = color.substring(1);				// remove #
-	color = parseInt(color, 16);			// convert to integer
-	color = 0xFFFFFF ^ color;				// invert three bytes
-	color = color.toString(16);				// convert to hex
-	color = ("000000" + color).slice(-6);	// pad with leading zeros
-	color = "#" + color;					// prepend #
-	return color;
-}
-
-function set_label(site_id, device_id) {
-	var selected = document.getElementById('select_nodeLabel').value
-	var label = site_id
-	if(selected != 'site_id') {
-		label = dict_devices[site_id][device_id][selected]
-	} 
-	var hostname = dict_devices[site_id][device_id]['hostname']
-	var string = hostname + '\n'
-	for(var i = 0; i<hostname.length; i++) {
-		string += '-'
-	}
-	string = string + '\n' + label
-	return string
-}
-
-function set_other(type, set_validNodes, cy) {
-	for(var device_id in dict_edgeOther) {
-		if(set_validNodes.has(device_id)) {
-			// get list of source interfaces that are fabric
-			var set_portFabric = new Set()
-			for(var target_id in dict_edgeFabric[device_id]) {
-				dict_edgeFabric[device_id][target_id]['pairs'].forEach(pair => {
-					set_portFabric.add(pair[0])
-				})
-			}
-			var previous_interface_id = null
-			var count_duplicates = 0
-			dict_edgeOther[device_id][type].forEach(row => {
-				var platform = row[0]
-				var interface_id = row[1]
-				if(interface_id == previous_interface_id) {
-					count_duplicates += 1
-				}
-				else {
-					count_duplicates = 0
-					previous_interface_id = interface_id
-				}
-				// ignore interface_id if already in fabric
-				// used to avoid re-listing interface ids for routers
-				if(set_portFabric.has(interface_id) == false) {
-					//var color = 'Orange
-					var color = '#FFA500'
-					var node_label
-					var shape
-					if(type == 'eth_port') {
-						node_label = 'eth'
-						shape = 'ellipse'
-					} else if(type == 'layer3') {
-						node_label = 'router'
-						shape = 'square'
-					}
-					var edge_id = device_id + '.' + interface_id + '.' + count_duplicates
-					var target_label
-					var line_style
-					var access_vlan = null
-					if(type == 'eth_port') {
-						access_vlan = dict_interfaces[device_id][interface_id]['access_vlan']
-						edge_id += ' - vlan' + access_vlan
-						target_label = 'vlan ' + access_vlan
-						line_style = 'solid'
-					} else if(type == 'layer3') {
-						edge_id += ' - uplink'
-						target_label = 'uplink'
-						line_style = 'dashed'
-					}
-					if(type == 'layer3' || (type == 'eth_port' && access_vlan != null)) {
-						cy.add({
-							data: {
-								id: device_id + '.' + interface_id + '.' + count_duplicates,
-								label: platform + '\n' + node_label,
-								color_main: color,
-								color_invert: invertColor(color),
-								shape: shape,
-								size: 25
-							}
-						})
-						cy.add({
-							data: {
-								id: edge_id,
-								source_label: interface_id,
-								source: device_id,
-								target: device_id + '.' + interface_id + '.' + count_duplicates,
-								target_label: target_label,
-								color_main: color,
-								color_invert: invertColor(color),
-								line_style: line_style
-							}
-						})
-					}
-				}
-			});
-		}
-	}
-}
-
-function load_graph(pending_device, pending_site, set_currentSite, graph) {
-	// clear all preview cells for devices
-	document.getElementById('pending_add_tor').innerHTML = ''
-	document.getElementById('pending_del_tor').innerHTML = ''
-	document.getElementById('pending_add_unmanaged').innerHTML = ''
-	document.getElementById('pending_del_unmanaged').innerHTML = ''
-	document.getElementById('show_editSite').innerHTML = ''
-	// clear all preview cells for sites
-	document.getElementById('pending_add_gatewaySite').innerHTML = ''
-	document.getElementById('pending_del_gatewaySite').innerHTML = ''
+class Graph {
 	/*
-		get list of sites that to display
-			'everything' will display all sites
-			'' won't display anything
-			all other values displayed as normal
-		won't reset the corresponding select option or preview cell
+		constructor
+		input:
+			dict_devices		dict	general information regarding devices
+			dict_edgeFabric		dict	neighbors of a given device
+		function
+			map all tor device ids to a site id
+			map fabric dictionary into dictionary of weighted edges
 	*/
-	var list_validSite = []
-	if(set_currentSite.size == 1 && set_currentSite.has('everything')) {
+	constructor(dict_devices, dict_edgeFabric, dict_edgeOther, dict_details) {
+		/*
+			all edges in graphs
+			each value is a source_id with a set containing target_id
+		*/
+		this.edges = {}
+		/*
+			weights of all edges
+			each value is a source_id with a number of dictionaries with target_id and weight
+		*/
+		this.weights = {}
+		/*
+			sites with router uplinks that can't be used
+				added and removed on user discretion
+		*/
+		this.set_site_ignore = new Set()
+		/*
+			each site contains a number of tors
+			string to set of strings mapping
+			each tor is a potential starting/ending point for a site-to-site path
+		*/
+		this.site2tor = {}
+		/*
+			each site can contain a number of unmanaged devices
+			there are two kinds of unmanaged devices:
+				other	any layer 2 unmanaged device
+				router	if no longer managed, all layer 3 switches are treated as routers
+						used to determine gateway sites
+			if a device on a path is within the total set of unmanaged devices,
+			where total set is the union of 'other' and 'router',
+			when calculating paths, that path weight is increased to Infinity
+
+		*/
+		this.site2unmanaged = {}
+		/*
+			counts number of layer3 uplinks in a site
+			a gateway is a site with at least one layer3 uplink
+				if a layer3 switch is unmanaged, it may create a new gateway site
+				if a layer3 switch is managed, it may remove a gateway site
+		*/
+		this.site2countLayer3 = {}
+		/*
+			record what site a device is in
+			mostly used to calculate paths from device to TOR
+			note that shortest paths contain overlapping subproblems
+		*/
+		this.device2site = {}
+
+		/*
+			count_nodes is number of devices on the network provided by customer
+			used to increase weight of links to routers for path calculation purposes
+		*/
+		this.count_nodes = 0
+
 		for(var site_id in dict_devices) {
-			list_validSite.push(site_id)
-		}
-	} else {
-		list_validSite = Array.from(set_currentSite)
-	}
-
-	// reset edit options for devices
-	document.getElementById("select_siteEdit").selectedIndex = "0"; 
-	// set pending added tors
-	for(var site_id in pending_device.add.tor) {
-		pending_device.add.tor[site_id].forEach(device_id => {
-			// cannot make an unmanaged device a TOR
-			// that wouldn't make sense
-			if (dict_devices[site_id][device_id]['is_managed'] == true) {
-				dict_devices[site_id][device_id]['is_tor'] = true
-				// add tor for calculation of gateway sites
-				graph.add_tor(site_id, device_id)
-			}
-		})
-		pending_device.add.tor[site_id].clear()
-	}
-	fillSelect_addTOR()
-	// set pending deleted tors
-	for(var site_id in pending_device.del.tor) {
-		pending_device.del.tor[site_id].forEach(device_id => {
-			dict_devices[site_id][device_id]['is_tor'] = false
-			// remove tor when considering gateway sites
-			graph.del_tor(site_id, device_id)
-		})
-		pending_device.del.tor[site_id].clear()
-	}
-	fillSelect_delTOR()
-	// set pending added unmanaged devices
-	for(var site_id in pending_device.add.unmanaged) {
-		pending_device.add.unmanaged[site_id].forEach(device_id => {
-			// cannot remove TORs from managed devices
-			// that wouldn't make sense
-			if (dict_devices[site_id][device_id]['is_tor'] == false) {
-				dict_devices[site_id][device_id]['is_managed'] = false
-				graph.add_unmanaged(site_id, device_id)
-			}
-		})
-		pending_device.add.unmanaged[site_id].clear()
-	}
-	fillSelect_addUnmanaged()
-	// set pending removed unmanaged devices
-	for(var site_id in pending_device.del.unmanaged) {
-		pending_device.del.unmanaged[site_id].forEach(device_id => {
-			dict_devices[site_id][device_id]['is_managed'] = true
-			graph.del_unmanaged(site_id, device_id)
-		})
-		pending_device.del.unmanaged[site_id].clear()
-	}
-	fillSelect_delUnmanaged()
-
-
-	// apply and reset edits for added gateway sites
-	pending_site.add.gateway.forEach(site_id => {
-		// remove site from list of ignored gateway sites
-		graph.del_site_ignore(site_id)
-	})
-	pending_site.add.gateway.clear()
-	// apply and reset edits for ignored gateway sites
-	pending_site.del.gateway.forEach(site_id => {
-		// add site to list of ignored gateway sites
-		graph.add_site_ignore(site_id)
-	})
-	pending_site.del.gateway.clear()
-	// reset index for gateway site select fields
-	document.getElementById('pending_add_gatewaySite').index = '0'
-	document.getElementById('pending_del_gatewaySite').index = '0'
-	// update results based on graph contents
-	fillSelect_addGatewaySite(graph)
-	fillSelect_delGatewaySite(graph)
-
-	console.log('gateway sites: ' + graph.get_list_site_gateway())
-	console.log('ignored sites: ' + graph.get_list_site_ignored())
-
-	/*
-		calculate site-to-site paths for gateway sites
-		later on, edge information is saved in the following format: 
-			source_id + '.' + pair[0] + ' - ' + target_id + '.' + pair[1]
-			target_id + '.' + pair[1] + ' - ' + source_id + '.' + pair[0]
-		therefore, create a set containing all of these edge IDs
-			if an edge ID generated later on is in this set, color it purple
-	*/
-	//var list_sourceSite = graph.get_site_noUplink()
-	var list_sourceSite = graph.get_list_site_noRoute()
-	var set_path2gateway = new Set()
-	list_sourceSite.forEach(source_site => {
-		//console.log(source_site)
-		var path = graph.get_path_site2gateway(source_site)
-		for(var i = 0; i < path.length - 1; i++) {
-			var source_id = path[i]
-			var target_id = path[i + 1]
-			var list_pairs = dict_edgeFabric[source_id][target_id]['pairs']
-			list_pairs.forEach(pair => {
-				var edge_id = source_id + '.' + pair[0] + ' - ' + target_id + '.' + pair[1]
-				set_path2gateway.add(edge_id)
-				var edge_reverse = target_id + '.' + pair[1] + ' - ' + source_id + '.' + pair[0]
-				set_path2gateway.add(edge_reverse)
-			})
-		}
-	})
-
-	/*
-		links from fabric devices to TOR are called vertical
-		some links are redundant, and these links are horizontal
-		horizontal links will be crosslinks (in this case, dashed lines)
-	*/
-	var dict_vertical = graph.get_dict_vertical()
-	console.log(dict_vertical)
-
-	// declare cytoscape object
-	var cy = cytoscape({
-		container: document.getElementById('cy'),
-		wheelSensitivity: 0.1,
-		elements: [],
-		style: [
-			{
-				selector: 'node',
-				style: {
-					'label': 'data(label)',
-					'text-wrap': 'wrap',
-					'height': 'data(size)',
-					'width': 'data(size)',
-					'text-valign': 'center',
-					'text-halign': 'center',
-					'shape': 'data(shape)',
-					'background-color': 'data(color_main)',
-					'background-opacity': 0.75
-				}
-			}, 
-			{
-				selector: 'edge',
-				style: {
-					'curve-style': 'bezier',
-					'source-label': 'data(source_label)',
-					'source-text-offset': 50,
-					'source-text-rotation': 'autorotate',
-					'target-label': 'data(target_label)',
-					'target-text-offset': 50,
-					'target-text-rotation': 'autorotate',
-					'text-wrap': 'wrap',
-					//'line-color': 'data(color_main)',
-					'line-opacity': 0.5,
-					'line-style': 'data(line_style)'
-				}
-			}, 
-			{
-				selector: 'node:selected',
-				style: {
-					'background-color': 'data(color_invert)',
-					'line-color': 'data(color_invert)'
+			if(site_id in this.site2tor == false) {
+				this.site2tor[site_id] = new Set()
+			} 
+			if(site_id in this.site2unmanaged == false) {
+				this.site2unmanaged[site_id] = {
+					'router': new Set(),
+					'other': new Set()
 				}
 			}
-		]
-	})
-	
-	// set sizes of nodes
-	for(var source_id in dict_edgeFabric) {
-		var size = Object.keys(dict_edgeFabric[source_id]).length
-		for(var site_id in dict_devices) {
+			if(site_id in this.site2countLayer3 == false) {
+				this.site2countLayer3[site_id] = 0
+			}
 			for(var device_id in dict_devices[site_id]) {
-				if(device_id == source_id) {
-					dict_devices[site_id][source_id]['size'] = size
+				// map device to site_id for ease of access
+				this.device2site[device_id] = site_id
+				// increment number of nodes in graph
+				this.count_nodes += 1
+				// add to tors in site if device is a tor
+				if(dict_devices[site_id][device_id]['is_tor']) {
+					this.site2tor[site_id].add(device_id)
+				}
+				// increment count of unmanaged devices
+				//		if "is_router" is true, add device as router
+				//		otherwise, add device as other
+				if(dict_devices[site_id][device_id]['is_managed'] == false) {
+					if(dict_devices[site_id][device_id]['is_router'] == true) {
+						this.site2unmanaged[site_id]['router'].add(device_id)
+						this.site2countLayer3[site_id] += 1
+					}
+					else {
+						this.site2unmanaged[site_id]['other'].add(device_id)
+					}
+				}
+				// add routers links in non-fabric edge links to set of routers in site
+				if(device_id in dict_edgeOther) {
+					dict_edgeOther[device_id]['layer3'].forEach(port_id => {
+						this.site2countLayer3[site_id] += 1
+					})
+				}
+				/*
+					get edges in fabric topology
+						routers will never be a source_id
+						routers may be a target_id
+					edges are added bidirectionally regardless
+					adding edges here instead of separate loop allows keying routers by sites
+				*/
+				if(device_id in dict_edgeFabric) {
+					
+					/*if(this.site2router[site_id].has(device_id)) {
+						weight = this.count_nodes
+					}*/
+					for(var target_id in dict_edgeFabric[device_id]) {
+						var weight = 1 / dict_edgeFabric[device_id][target_id]['pairs'].length
+						/*if(this.site2router[site_id].has(target_id)) {
+							weight = this.count_nodes
+						}*/
+						this.add_edge(device_id, target_id, weight)
+					}
 				}
 			}
 		}
+		dict_details['list_site_ignored'].forEach(site => {
+			if(site in this.site2countLayer3 && this.site2countLayer3[site] > 0) {
+				this.add_site_ignore(site)
+			}
+		})
 	}
 
-	// only create edge if source and target IDs are in the given site
-	// store those nodes here
-	var set_validNodes = new Set()
+	/*
+		get_list_site_gateway
+			output:
+				list_site	list	list of sites that are gateway and not ignored
+			function: 
+				return all sites with at least one layer3 uplink that are not ignored
+	*/
+	get_list_site_gateway() {
+		var list_site = []
+		for(var site_id in this.site2countLayer3) {
+			var count = this.site2countLayer3[site_id]
+			if(count && this.set_site_ignore.has(site_id) == false) {
+				list_site.push(site_id)
+			}
+		}
+		list_site.sort()
+		return list_site
+	}
+	/*
+		get_list_site_ignored
+			output: 
+				list_site	list	list of sites that are gateway and ignored
+			function: 
+				return all sites with at least one layer3 uplink that are ignored
+	*/
+	get_list_site_ignored() {
+		var list_site = Array.from(this.set_site_ignore)
+		//console.log(list_site)
+		//console.log(list_site)
+		list_site.sort()
+		return list_site
+	}
+	/*
+		get_list_site_noRoute
+			output:
+				list_site	site	list of sites that are not gateways or ignored
+			function: 
+				return all sites without any layer3 uplinks
+	*/
+	get_list_site_noRoute() {
+		var list_site = []
+		for(var site_id in this.site2countLayer3) {
+			var count = this.site2countLayer3[site_id]
+			if(count == 0 || this.set_site_ignore.has(site_id)) {
+				list_site.push(site_id)
+			}
+		}
+		list_site.sort()
+		return list_site
+	}
 
-	for(var i = 0; i<list_validSite.length; i++) {
-		site_id = list_validSite[i]
-		for(var device_id in dict_devices[site_id]) {
-			set_validNodes.add(device_id)
-			var device = dict_devices[site_id][device_id]
-			var hostname = device['hostname']
-			var is_router = device['is_router']
-			var is_tor = device['is_tor']
-			var is_managed = device['is_managed']
-			var is_layer3 = device['is_layer3']
-			var shape = 'ellipse'
-			if(is_tor == true) {
-				shape = 'star'
-			} else if(is_router || (!is_managed && is_layer3)) {
-				shape = 'square'
+	/*
+		add_site_ignore
+			input: 
+				site_id		string	name of site
+			function: 
+				check if site_id has at least one router uplink
+					if yes, site_id is now ignored when calculating service uplink paths
+				sites without router uplinks are ignored
+	*/
+	add_site_ignore(site_id) {
+		if(this.site2countLayer3[site_id] > 0) {
+			this.set_site_ignore.add(site_id)
+		}
+	}
+	/*
+		add_site_ignore
+			input: 
+				site_id		string	name of site
+			function: 
+				check if site_id has at least one router uplink
+					site can now be used for calculating service paths
+				sites without router uplinks are ignored
+	*/
+	del_site_ignore(site_id) {
+		if(this.site2countLayer3[site_id] > 0) {
+			this.set_site_ignore.delete(site_id)
+		}
+	}
+	/*
+		add_unmanaged
+			input:
+				site_id		string	name of site
+				device_id	string	name of device
+			function: 
+				Graph will treat device as unmanaged
+				edges with input devices are weighted as infinity (unreachable)
+				if layer 3, used to determine potential gateway sites
+	*/
+	add_unmanaged(site_id, device_id) {
+		if(dict_devices[site_id][device_id]['is_layer3'] == true) {
+			this.site2unmanaged[site_id]['router'].add(device_id)
+			this.site2countLayer3[site_id] += 1
+		}
+		else {
+			this.site2unmanaged[site_id]['other'].add(device_id)
+		}
+	}
+	/*
+		del_unmanaged
+			input:
+				site_id		string	name of site
+				device_id	string	name of device
+			function: 
+				Graph will treat device as managed
+				edges with devices are treated normally
+	*/
+	del_unmanaged(site_id, device_id) {
+		if(this.site2unmanaged[site_id]['router'].has(device_id)) {
+			this.site2unmanaged[site_id]['router'].delete(device_id)
+			this.site2countLayer3[site_id] -= 1
+		}
+		else if (this.site2unmanaged[site_id]['other'].has(device_id)){
+			this.site2unmanaged[site_id]['other'].delete(device_id)
+		}
+	}
+	/*
+		add_tor
+			input:
+				site_id		string	name of site
+				tor_id		string	name of tor
+			function: 
+				add tor to given site
+				if tor was previously a router
+					remove from set of routers
+					reduce count of routers for given site
+					reduce weight of associated links
+	*/
+	add_tor(site_id, tor_id) {
+		this.site2tor[site_id].add(tor_id)
+		for(var target_id in this.weights[tor_id]) {
+			this.weights[tor_id][target_id] = 1
+		}
+		for(var source_id in this.weights) {
+			if(tor_id in this.weights[source_id]) {
+				this.weights[source_id][tor_id] = 1
 			}
-			var is_layer3 = device['is_layer3']
-			//var color = 'yellowgreen'
-			var color = '#9ACD32'
-			if(is_layer3 == true) {
-				//color = 'turquoise'
-				color = '#40E0D0'
-			}
-			var size = 0
-			if(dict_devices[site_id][device_id]['is_managed'] == false) {
-				//color = 'Orange
-				color = '#FFA500'
-			}
-			if('size' in device) {
-				size = device['size']
-			}
-			cy.add({
-				data: {
-					id: hostname,
-					label: set_label(site_id, device_id),
-					shape: shape,
-					color_main: color,
-					color_invert: invertColor(color),
-					size: size * 5 + 25
+		}
+	}
+	/*
+		del_tor
+			input:
+				site_id		string	name of site
+				tor_id		string	name of tor
+			function: 
+				remove tor stored in given site
+	*/
+	del_tor(site_id, tor_id) {
+		this.site2tor[site_id].delete(tor_id)
+	}
+	/*
+		get_path_site2gateway
+			input: 
+				source_site		string	name of starting site, site has no routers
+			output:
+				shortest_path	list	all nodes to get from source to target site
+			function: 
+				get path from site with no routers to site with at least one router
+				get every path from every tor between a source and target site
+				return shortest of those paths
+	*/
+	get_path_site2gateway(source_site) {
+		/*
+			under these conditions, return null and stop processing
+				site contains at least one router uplink
+				site has not been deliberately ignored by user
+		*/
+		// remember shortest path
+		var shortest_path = []
+		var shortest_length = Number.MAX_SAFE_INTEGER
+		// ge list of tor in source site
+		var list_sourceTOR = Array.from(this.site2tor[source_site])
+		// get list of target sites
+		var list_targetSite = []
+		for(var target_site in this.site2countLayer3) {
+			if(target_site != source_site) {
+				var count = this.site2countLayer3[target_site]
+				if(count && this.set_site_ignore.has(target_site) == false) {
+					list_targetSite.push(target_site)
 				}
+			}
+		}
+		//console.log(list_targetSite)
+		list_sourceTOR.forEach(source_tor => {
+			list_targetSite.forEach(target_site => {
+				// get list of tor in current target site
+				var list_targetTOR = Array.from(this.site2tor[target_site])
+				list_targetTOR.forEach(target_tor => {
+					var path = this.helper_dijkstra(source_tor, target_tor)
+					if(path != null && path.length < shortest_length) {
+						shortest_path = path
+						shortest_length = path.length
+					}
+				})
+			})
+		})
+		//console.log(shortest_path)
+		return shortest_path
+	}
+	/*
+		add_edge
+			input: 
+				source_id	string	starting end of edge
+				target_id	string	ending point of edge
+				weight		int		likelihood of using link (increase weight for routers)
+			function: 
+				for each edge in dict_edgeFabric, add edge to this.edges
+				all links are considered bidirectional
+				must also add links for routers in case removing router breaks graph
+					in the case that there is a link to a router, increase the weight of that link
+					note that edges are immutable
+	*/
+	add_edge(source_id, target_id, weight) {
+		// set source edges
+		if(source_id in this.edges == false) {
+			this.edges[source_id] = []
+		}
+		if(this.edges[source_id].includes(target_id) == false) {
+			this.edges[source_id].push(target_id)
+		}
+		// set target edges
+		if(target_id in this.edges == false) {
+			this.edges[target_id] = []
+		}
+		if(this.edges[target_id].includes(source_id) == false) {
+			this.edges[target_id].push(source_id)
+		}
+		// set source to target weight
+		if(source_id in this.weights == false) {
+			this.weights[source_id] = {}
+		}
+		this.weights[source_id][target_id] = weight
+		//set target to source weight
+		if(target_id in this.weights == false) {
+			this.weights[target_id] = {}
+		}
+		this.weights[target_id][source_id] = weight
+	}
+	get_dict_vertical() {
+		var dict_vertical = {}
+		for(var device_id in this.edges) {
+			//console.log(device_id)
+			var site_id = this.device2site[device_id]
+			var not_tor = !this.site2tor[site_id].has(device_id)
+			var not_unmanaged_router = !this.site2unmanaged[site_id]['router'].has(device_id)
+			var not_unmanaged_other = !this.site2unmanaged[site_id]['other'].has(device_id)
+			if(not_tor && not_unmanaged_router && not_unmanaged_other) {
+				//console.log(device_id)
+				var length_min = Infinity
+				var shortest_path = []
+				//console.log(this.site2tor[site_id])
+				this.site2tor[site_id].forEach(tor_id => {
+					var path = this.helper_dijkstra(device_id, tor_id)
+					if(path) {
+						if(path.length < length_min) {
+							length_min = path.length
+							shortest_path = []
+							shortest_path.push(path)
+						}
+						else if(path.length == 2 && length_min == 2) {
+							shortest_path.push(path)
+						}
+					}
+					if(path && path.length < length_min) {
+						length_min = path.length
+						shortest_path = path
+					}
+				})
+				//console.log(shortest_path)
+				for(var i = 0; i < shortest_path.length; i++) {
+					//console.log(shortest_path[i])
+					for(var j = 1; j < shortest_path[i].length; j++) {
+						var source_id = shortest_path[i][j - 1]
+						if(source_id in dict_vertical == false) {
+							dict_vertical[source_id] = new Set()
+						}
+						var target_id = shortest_path[i][j]
+						if(target_id in dict_vertical == false) {
+							dict_vertical[target_id] = new Set()
+						}
+						dict_vertical[source_id].add(target_id)
+						dict_vertical[target_id].add(source_id)
+					}
+				}
+				/*for(var i = 1; i < shortest_path.length; i++) {
+					var source_id = shortest_path[i - 1]
+					if(source_id in dict_vertical == false) {
+						dict_vertical[source_id] = new Set()
+					}
+					var target_id = shortest_path[i]
+					if(target_id in dict_vertical == false) {
+						dict_vertical[target_id] = new Set()
+					}
+					dict_vertical[source_id].add(target_id)
+					dict_vertical[target_id].add(source_id)
+				}*/
+			}
+		}
+		return dict_vertical
+	}
+	/*
+		helper_dijkstra
+			input:
+				initial		string	starting node
+				end			string	ending node
+			output:
+				path		list	nodes between initial and end, inclusive, in order
+			function: 
+				record shortest path of next-hops to get from initial to end
+				meant to only be used to get between TORs
+	*/
+	helper_dijkstra(initial, end) {
+		var set_unmanaged = new Set()
+		for(var site_id in this.site2unmanaged) {
+			this.site2unmanaged[site_id]['router'].forEach(device_id => {
+				set_unmanaged.add(device_id)
+			})
+			this.site2unmanaged[site_id]['other'].forEach(device_id => {
+				set_unmanaged.add(device_id)
 			})
 		}
-	}
+		//console.log('unmanaged devices')
+		//console.log(set_unmanaged)
+		var shortest_paths = {}
+		shortest_paths[initial] = [null, 0]
+		var current_node = initial
+		var visited = new Set()
 
-	var set_edgeID = new Set()
-	for(var source_id in dict_edgeFabric) {
-		for(var target_id in dict_edgeFabric[source_id]) {
-			for(i = 0; i< dict_edgeFabric[source_id][target_id]['pairs'].length; i++) {
-				var pair = dict_edgeFabric[source_id][target_id]['pairs'][i]
-				var edge_id = source_id + '.' + pair[0] + ' - ' + target_id + '.' + pair[1]
-				var edge_reverse = target_id + '.' + pair[1] + ' - ' + source_id + '.' + pair[0]
-				// var color = 'DarkGray'
-				var color = '#A9A9A9'
-				if(set_path2gateway.has(edge_id) || set_path2gateway.has(edge_reverse)) {
-					// color = 'FireBrick'
-					color = '#B22222'
+		while(current_node != end) {
+			visited.add(current_node)
+			var destinations = []
+			if(current_node in this.edges) {
+				destinations = this.edges[current_node]
+			}
+			var weight_to_current_node = shortest_paths[current_node][1]
+			
+			destinations.forEach(next_node => {
+				var weight = this.weights[current_node][next_node] + weight_to_current_node
+				// if a node is unmanaged, set it to the highest reasonable possible weight
+				// ideally, this will prevent creation of paths containing illegal nodes
+				// if not possible, path will not be returned
+				if(set_unmanaged.has(current_node) || set_unmanaged.has(next_node)) {
+					weight = this.count_nodes * (this.count_nodes - 1) / 2
 				}
-				var line_style = 'solid'
-				/*
-					determine service links
-						link is between TORs
-						link is to a layer3 uplink
-						link is uplink to central site
-						link is horizontal (redundant)
-					set edge as dashed
-				*/
-				if(source_id in dict_vertical && !dict_vertical[source_id].has(target_id)) {
-					line_style = 'dashed'
-				}
-				for(var site_id in dict_devices) {
-					site = dict_devices[site_id]
-					if(source_id in site && target_id in site) {
-						source = site[source_id]
-						target = site[target_id]
-						if(source['is_tor'] == true && target['is_tor'] == true) {
-							line_style = 'dashed'
-						} else if(source['is_router'] == true || target['is_router'] == true) {
-							line_style = 'dashed'
-						}
+				if(next_node in shortest_paths == false) {
+					shortest_paths[next_node] = [current_node, weight]
+				} else {
+					var current_shortest_weight = shortest_paths[next_node][1]
+					if(current_shortest_weight > weight) {
+						shortest_paths[next_node] = [current_node, weight]
 					}
 				}
-				/*
-					add edges to graph
-					add both directions of edge to set
-						this avoids duplicate edges
-				*/
-				if(set_validNodes.has(source_id) && set_validNodes.has(target_id)) {
-					if(!set_edgeID.has(edge_id) && !set_edgeID.has(edge_reverse)) {
-						var source_label = pair[0] + ' - '
-						if(pair[0] != null) {
-							source_label += dict_interfaces[source_id][pair[0]]['port_number']
-						}
-						else {
-							source_label += 'null'
-						}
-						var target_label = pair[1] + ' - '
-						if(pair[1] != null) {
-							target_label += dict_interfaces[target_id][pair[1]]['port_number']
-						}
-						else {
-							target_label += 'null'
-						}
-						cy.add({
-							data: {
-								id: edge_id,
-								source: source_id,
-								target: target_id,
-								source_label: source_label,
-								target_label: target_label,
-								line_style: line_style
-							}
-						})
-						set_edgeID.add(edge_id)
-						set_edgeID.add(edge_reverse)
-					}
+			})
+
+			var next_destinations = {}
+			for(var node in shortest_paths) {
+				if(visited.has(node) == false) {
+					next_destinations[node] = shortest_paths[node]
+				}
+			}
+			if(Object.keys(next_destinations).length == 0) {
+				return null
+			}
+			var lowest_weight = Number.MAX_SAFE_INTEGER
+			for(var key in next_destinations) {
+				var node = next_destinations[key]
+				var weight = node[1]
+				if(weight < lowest_weight) {
+					lowest_weight = weight
+					current_node = key
 				}
 			}
 		}
+		var path = []
+		while(current_node != null) {
+			var next_node = shortest_paths[current_node][0]
+			path.unshift(current_node)
+			current_node = next_node
+		}
+		// check that unmanaged devices are not on the path
+		// only return path if all devices are managed
+		var flag_noUnmanaged = true
+		path.forEach(device_id => {
+			if(set_unmanaged.has(device_id)) {
+				flag_noUnmanaged = false
+			}
+		})
+		if(flag_noUnmanaged) {
+			return path
+		}
+		else {
+			return null
+		}
 	}
-
-	if(document.getElementById('showRouter_edge').checked == true) {
-		set_other('layer3', set_validNodes, cy)
-	}
-	if(document.getElementById('showEth').checked == true) {
-		set_other('eth_port', set_validNodes, cy)
-	}
-	cy.layout({
-		name: 'fcose', 
-		"edgeElasicity": edge => 0,  
-		"nodeRepulsion": node => 999999, 
-		"idealEdgeLength": edge => 250
-	}).run();
 }
