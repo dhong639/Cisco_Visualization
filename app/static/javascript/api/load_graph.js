@@ -9,19 +9,6 @@ function invertColor(hexTripletColor) {
 	return color;
 }
 
-/*function get_countVLAN(device_id, interface_id) {
-	var count_vlan = 0
-	if(dict_interfaces[device_id][interface_id]['access_vlan'] != null) {
-		count_vlan += 1
-	}
-	if(dict_interfaces[device_id][interface_id]['voice_lan'] != null) {
-		count_vlan += 1
-	}
-	count_vlan += dict_interfaces[device_id][interface_id]['trunk_list'].length
-	count_vlan += dict_interfaces[device_id][interface_id]['list_foundMAC'].length
-	return count_vlan
-}*/
-
 function set_label(site_id, device_id) {
 	var selected = document.getElementById('select_nodeLabel').value
 	var label = site_id
@@ -47,7 +34,18 @@ function set_other(type, set_validNodes, cy) {
 					set_portFabric.add(pair[0])
 				})
 			}
-			dict_edgeOther[device_id][type].forEach(interface_id => {
+			var previous_interface_id = null
+			var count_duplicates = 0
+			dict_edgeOther[device_id][type].forEach(row => {
+				var platform = row[0]
+				var interface_id = row[1]
+				if(interface_id == previous_interface_id) {
+					count_duplicates += 1
+				}
+				else {
+					count_duplicates = 0
+					previous_interface_id = interface_id
+				}
 				// ignore interface_id if already in fabric
 				// used to avoid re-listing interface ids for routers
 				if(set_portFabric.has(interface_id) == false) {
@@ -62,25 +60,25 @@ function set_other(type, set_validNodes, cy) {
 						node_label = 'router'
 						shape = 'square'
 					}
-					var edge_id
+					var edge_id = device_id + '.' + interface_id + '.' + count_duplicates
 					var target_label
 					var line_style
 					var access_vlan = null
 					if(type == 'eth_port') {
 						access_vlan = dict_interfaces[device_id][interface_id]['access_vlan']
-						edge_id = device_id + '.' + interface_id + ' - vlan' + access_vlan
+						edge_id += ' - vlan' + access_vlan
 						target_label = 'vlan ' + access_vlan
 						line_style = 'solid'
 					} else if(type == 'layer3') {
-						edge_id = device_id + '.' + interface_id + ' - uplink'
+						edge_id += ' - uplink'
 						target_label = 'uplink'
 						line_style = 'dashed'
 					}
 					if(type == 'layer3' || (type == 'eth_port' && access_vlan != null)) {
 						cy.add({
 							data: {
-								id: device_id + '.' + interface_id,
-								label: node_label,
+								id: device_id + '.' + interface_id + '.' + count_duplicates,
+								label: platform + '\n' + node_label,
 								color_main: color,
 								color_invert: invertColor(color),
 								shape: shape,
@@ -92,7 +90,7 @@ function set_other(type, set_validNodes, cy) {
 								id: edge_id,
 								source_label: interface_id,
 								source: device_id,
-								target: device_id + '.' + interface_id,
+								target: device_id + '.' + interface_id + '.' + count_duplicates,
 								target_label: target_label,
 								color_main: color,
 								color_invert: invertColor(color),
@@ -389,10 +387,20 @@ function load_graph(pending_device, pending_site, set_currentSite, graph) {
 				*/
 				if(set_validNodes.has(source_id) && set_validNodes.has(target_id)) {
 					if(!set_edgeID.has(edge_id) && !set_edgeID.has(edge_reverse)) {
-						var source_label = pair[0]
-						source_label += ' - ' + dict_interfaces[source_id][pair[0]]['port_number']
-						var target_label = pair[1]
-						target_label += ' - ' + dict_interfaces[target_id][pair[1]]['port_number']
+						var source_label = pair[0] + ' - '
+						if(pair[0] != null) {
+							source_label += dict_interfaces[source_id][pair[0]]['port_number']
+						}
+						else {
+							source_label += 'null'
+						}
+						var target_label = pair[1] + ' - '
+						if(pair[1] != null) {
+							target_label += dict_interfaces[target_id][pair[1]]['port_number']
+						}
+						else {
+							target_label += 'null'
+						}
 						cy.add({
 							data: {
 								id: edge_id,
@@ -400,8 +408,6 @@ function load_graph(pending_device, pending_site, set_currentSite, graph) {
 								target: target_id,
 								source_label: source_label,
 								target_label: target_label,
-								//color_main: color,
-								//color_invert: invertColor(color),
 								line_style: line_style
 							}
 						})
@@ -419,40 +425,6 @@ function load_graph(pending_device, pending_site, set_currentSite, graph) {
 	if(document.getElementById('showEth').checked == true) {
 		set_other('eth_port', set_validNodes, cy)
 	}
-	/*cy.style().selector("node").style("label", "data(label)");
-	cy.style().selector("node").style("text-wrap", "wrap");
-	cy.style().selector("node").style("height", "data(size)");
-	cy.style().selector("node").style("width", "data(size)");
-	cy.style().selector("node").style("text-valign", "center");
-	cy.style().selector("node").style("text-halign", "center");
-	cy.style().selector("node").style("shape", "data(shape)")
-	cy.style().selector("node").style("background-color", "data(color_main)")
-	cy.style().selector("node").style("background-opacity", 0.75)
-	cy.style().selector("edge").style("curve-style", "bezier");
-	cy.style().selector("edge").style("source-label", "data(source_label)");
-	cy.style().selector("edge").style("source-text-offset", 50);
-	cy.style().selector("edge").style("source-text-rotation", "autorotate");
-	cy.style().selector("edge").style("target-label", "data(target_label)");
-	cy.style().selector("edge").style("target-text-offset", 50);
-	cy.style().selector("edge").style("target-text-rotation", "autorotate");
-	cy.style().selector("edge").style("text-wrap", "wrap");
-	cy.style().selector("edge").style("line-color", "data(color_main)");
-	cy.style().selector("edge").style("line-opacity", 0.5);
-	cy.style().selector("edge").style("line-style", "data(line_style)")
-	cy.style().selector(":selected").style("background-color", "data(color_invert)")
-	cy.style().selector(":selected").style("line-color", "data(color_invert)")*/
-	/*if(set_edgeID.size < 15) {
-		cy.layout({
-			name: 'concentric'
-		}).run()
-	} else {
-		cy.layout({
-			name: 'fcose', 
-			"edgeElasicity": edge => 0,  
-			"nodeRepulsion": node => 999999, 
-			"idealEdgeLength": edge => 250
-		}).run();
-	}*/
 	cy.layout({
 		name: 'fcose', 
 		"edgeElasicity": edge => 0,  
