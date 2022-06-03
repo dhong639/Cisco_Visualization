@@ -118,6 +118,7 @@ class ScannerNeighbor:
 			targetIntf = self.get_nameIntf(row['port id'])
 			capability = row['capability']
 			targetID = row['device id']
+			platform = row['platform']
 			if targetID != None:
 				targetID = None if targetID.strip() == '' else targetID.split('.')[0]
 			# if both sourceID and targetID are fabric, record bidirectional links
@@ -127,7 +128,7 @@ class ScannerNeighbor:
 			# connected to some edge device
 			# note that unmanaged devices are still considered fabric when creating the graph
 			elif sourceID in self.set_fabric and targetID not in self.set_fabric:
-				self.helper_addOther(sourceID, sourceIntf, capability)
+				self.helper_addOther(sourceID, sourceIntf, capability, platform)
 	
 	def add_lldpNeighbors(self, sourceID, section_lldpNeighbors):
 		for row in section_lldpNeighbors:
@@ -145,7 +146,7 @@ class ScannerNeighbor:
 			# connected to some edge device
 			# note that unmanaged devices are still considered fabric when creating the graph
 			elif sourceID in self.set_fabric and targetID not in self.set_fabric:
-				self.helper_addOther(sourceID, sourceIntf, capability)
+				self.helper_addOther(sourceID, sourceIntf, capability, targetID)
 
 	def add_lldpNeiDe(self, sourceID, section_lldp):
 		for row in section_lldp:
@@ -176,7 +177,7 @@ class ScannerNeighbor:
 			# connected to some edge device
 			# note that unmanaged devices are still considered fabric when creating the graph
 			elif sourceID in self.set_fabric and targetID not in self.set_fabric:
-				self.helper_addOther(sourceID, sourceIntf, capability)
+				self.helper_addOther(sourceID, sourceIntf, capability, port_id)
 
 	def get_nameIntf(self, string):
 		if string == None:
@@ -225,14 +226,14 @@ class ScannerNeighbor:
 		if pair not in self.dict_edgeFabric[sourceID][targetID]['pairs'] and pair != [None, None]:
 			self.dict_edgeFabric[sourceID][targetID]['pairs'].append(pair)
 
-	def helper_addOther(self, sourceID, sourceIntf, capability):
+	def helper_addOther(self, sourceID, sourceIntf, capability, platform):
 		if sourceID not in self.dict_edgeOther:
 			self.dict_edgeOther[sourceID] = {
-				'layer3': set(),
-				'eth_port': set()
+				'layer3': [],
+				'eth_port': []
 			}
 		if sourceIntf != None and sourceID in self.set_fabric:
-			if capability != None and 'r' in capability:
-				self.dict_edgeOther[sourceID]['layer3'].add(sourceIntf)
+			if capability != None and 'r' in capability and 't' not in capability:
+				self.dict_edgeOther[sourceID]['layer3'].append([platform, sourceIntf])
 			else:
-				self.dict_edgeOther[sourceID]['eth_port'].add(sourceIntf)
+				self.dict_edgeOther[sourceID]['eth_port'].append([platform, sourceIntf])
