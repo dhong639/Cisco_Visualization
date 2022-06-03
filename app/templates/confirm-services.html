@@ -53,7 +53,12 @@
 						{% for service in list_missing %}
 						<tr>
 							<td scope="row">{{ service.vlan }}</td>
-							<td>{{ service.type }}</td>
+							<td>
+								{% for type in service.type %}
+								{{ type }}
+								<br />
+								{% endfor %}
+							</td>
 							<td>{{ service.site }}</td>
 							<td>{{ service.name }}</td>
 						</tr>
