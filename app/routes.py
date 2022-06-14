@@ -142,6 +142,8 @@ def post_network_files(customer, timestamp):
 				'list_site_gateway': [],
 				'list_site_ignored': [],
 				'dict_serviceUp': {},
+				#'dict_serviceUp_single': {},
+				#'dict_serviceUp_multiple': {},
 				'sdlc': request.form['sdlc'],
 				'enable': request.form['enable'],
 				'ssh_username': request.form['ssh_username'],
@@ -486,6 +488,9 @@ def post_preview_topology(customer, timestamp):
 		set_unmanaged = set()
 		set_site_gateway = set()
 		set_site_ignored = set()
+		dict_serviceUp = {}
+		#dict_serviceUp_single = {}
+		#dict_serviceUp_multiple = {}
 		with open(PATH_CUSTOMER_SAVE_DETAILS.format(customer, timestamp), 'r') as file:
 			dict_details = json.load(file)
 			tor_count = dict_details['tor_count']
@@ -495,6 +500,8 @@ def post_preview_topology(customer, timestamp):
 			set_site_gateway = set(dict_details['list_site_gateway'])
 			set_site_ignored = set(dict_details['list_site_ignored'])
 			dict_serviceUp = dict_details['dict_serviceUp']
+			#dict_serviceUp_single = dict_details['dict_serviceUp_single']
+			#dict_serviceUp_multiple = dict_details['dict_serviceUp_multiple']
 		
 		dict_devices = {}
 		path_prescan = PATH_CUSTOMER_PRESCAN.format(customer, timestamp)
@@ -584,32 +591,53 @@ def save_topology_edits(customer, timestamp, flag):
 		dict_details = {}
 		with open(PATH_CUSTOMER_SAVE_DETAILS.format(customer, timestamp), 'r') as file:
 			dict_details = json.load(file)
+		# tors, unmanaged, and gateways are all lists
 		for key in ['list_tor', 'list_unmanaged', 'list_site_gateway', 'list_site_ignored']:
 			if request.form[key]:
 				dict_details[key] = json.loads(request.form[key])
 			else:
 				dict_details[key] = []
+		# service uplinks are dictionaries
 		dict_details['dict_serviceUp'] = json.loads(request.form['pending_serviceUp'])
 		with open(PATH_CUSTOMER_SAVE_DETAILS.format(customer, timestamp), 'w') as file:
 			json.dump(dict_details, file, indent=4)
+		#path_prescan = PATH_CUSTOMER_PRESCAN.format(customer, timestamp)
+		dict_serviceUp = dict_details['dict_serviceUp']
+
+		#dict_details['dict_serviceUp_single'] = json.loads(request.form['dict_serviceUp_single'])
+		#dict_details['dict_serviceUp_multiple'] = json.loads(request.form['dict_serviceUp_multiple'])
+		
+		path_prescan = PATH_CUSTOMER_PRESCAN.format(customer, timestamp)
+		#	mapping non-fabric edges
+		#		some fabric devices can be unmanaged, creating non-fabric links
+		#		some ports can be set as service up, making them non-fabric
+		dict_edgesOther = {}
+		with open(os.path.join(path_prescan, 'graph_other.json'), 'r') as file:
+			dict_edgesOther = json.load(file)
+		for device_id in dict_serviceUp:
+			for interface_id in dict_serviceUp[device_id]:
+				if device_id not in dict_edgesOther:
+					dict_edgesOther = {
+						'layer3': {},
+						'eth_port': {}
+					}
+				dict_eth = {}
+				for source_intf in dict_edgesOther[device_id]['eth_port']:
+					value = dict_edgesOther[device_id]['eth_port'][source_intf]
+					if source_intf != interface_id:
+						dict_eth[source_intf] = value
+					else:
+						dict_edgesOther[device_id]['layer3'][interface_id] = value
+				dict_edgesOther[device_id]['eth_port'] = dict_eth
+				if interface_id not in dict_edgesOther[device_id]['layer3']:
+					dict_edgesOther[device_id]['layer3'][interface_id] = None
+		with open(os.path.join(path_prescan, 'graph_other.json'), 'w') as file:
+			json.dump(dict_edgesOther, file, indent=4)
+		# only run primary ns_scan_capture if allowed to continue to next step
 		if flag:
 			return redirect(url_for('get_login'))
-		else:
-			path_prescan = PATH_CUSTOMER_PRESCAN.format(customer, timestamp)
-			dict_serviceUp = dict_details['dict_serviceUp']
-			dict_edgesOther = {}
-			with open(os.path.join(path_prescan, 'graph_other.json'), 'r') as file:
-				dict_edgesOther = json.load(file)
-			for device_id in dict_serviceUp:
-				for interface_id in dict_serviceUp[device_id]:
-					dict_edgesOther[device_id]['layer3'].append([
-						'undefined_serviceUplink',
-						interface_id
-					])
-			with open(os.path.join(path_prescan, 'graph_other.json'), 'w') as file:
-				json.dump(dict_edgesOther, file, indent=4)
-			primary_scan(customer, timestamp)
-			return redirect(url_for('get_provisioning_confirm', customer=customer, timestamp=timestamp))
+		primary_scan(customer, timestamp)
+		return redirect(url_for('get_provisioning_confirm', customer=customer, timestamp=timestamp))
 
 
 @app.route('/<customer>/<timestamp>/confirm-provisioning', methods=['GET'])
