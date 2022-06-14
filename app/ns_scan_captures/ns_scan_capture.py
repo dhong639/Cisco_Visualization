@@ -321,13 +321,6 @@ def primary_scan(customer, timestamp):
 					for pair in list_pairs:
 						dict_path[source_id].add(pair[0])
 						dict_path[target_id].add(pair[1])
-			#print(graph.path_toTOR(site_id, device_id))
-	
-	"""print('test')
-	print(dict_path)
-	for device_id in dict_path:
-		dict_path[device_id] = sorted(dict_path[device_id])
-	print(json.dumps(dict_path, indent=4))"""
 
 	# determine paths from noRoute to gateway sites
 	list_path_gatewaySite = []
@@ -424,6 +417,7 @@ def primary_scan(customer, timestamp):
 				if access_vlan != None:
 					set_intf_portType(device_id, intf, 'eth_port', capture_devices)
 		list_intf_layer3 = graph.get_intf_layer3(device_id)
+		print(device_id, '\t', list_intf_layer3)
 		if list_intf_layer3:
 			for intf in list_intf_layer3:
 				if count_vlan(device_id, intf, capture_devices) == 0:
