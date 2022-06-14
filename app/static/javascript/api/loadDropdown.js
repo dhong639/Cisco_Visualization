@@ -92,6 +92,19 @@ function fillSelect_deviceID(set_currentSite) {
 		var list = get_list_deviceID(site_id)
 		helper_fillSelect("select_detail_hostname", list)
 	});
+
+	emptySelect('select_uplinkTOR', 1)
+	var list_sites
+	if(site_id == 'everything') {
+		list_sites = Object.keys(dict_devices)
+	}
+	else {
+		list_sites = Array.from(set_currentSite)
+	}
+	list_sites.forEach(site_id => {
+		console.log(site_id)
+		helper_fillSelect('select_uplinkTOR', get_listTOR(site_id, true))
+	})
 }
 /*
 	fillSelect_intf
@@ -100,20 +113,9 @@ function fillSelect_deviceID(set_currentSite) {
 		empty 'select_detail_interface' of all but first value
 		fill 'select_detail_interface' with interface names from devices
 */
-function fillSelect_intf() {
-	// clear displayed interface information
-	emptySelect("select_detail_interface", 1)
-	document.getElementById('show_detail_interface').innerHTML = ''
-	document.getElementById('show_detail_channelID').innerHTML = ''
-	document.getElementById('show_detail_access').innerHTML = ''
-	document.getElementById('show_detail_trunk').innerHTML = ''
-	document.getElementById('show_detail_voice').innerHTML = ''
-	document.getElementById('show_detail_foundMAC').innerHTML = ''
-	document.getElementById('show_description_interface').innerHTML = ''
-
+function fillSelect_intf(select_device_id) {
 	// set displayed hostname
-	var device_id = document.getElementById("select_detail_hostname").value
-	document.getElementById('show_detail_hostname').innerHTML = device_id
+	var device_id = document.getElementById(select_device_id).value
 
 	// fill out interface information
 	var list = []
@@ -121,7 +123,50 @@ function fillSelect_intf() {
 		list = Object.keys(dict_interfaces[device_id])
 		list.sort()
 	}
-	helper_fillSelect("select_detail_interface", list)
+	// if interface is a non-fabric edge, append type to interface name
+	var dict_text = {}
+	list.forEach(text => {
+		dict_text[text] = text
+		if(device_id in dict_edgeOther && text in dict_edgeOther[device_id]['layer3']) {
+			dict_text[text] = text + ' - layer3'
+		}
+		else if(device_id in dict_edgeOther && text in dict_edgeOther[device_id]['eth_port']) {
+			dict_text[text] = text + ' - eth_port'
+		}
+	})
+
+	// clear displayed interface information
+	if(select_device_id == 'select_detail_hostname') {
+		emptySelect("select_detail_interface", 1)
+		helper_fillSelect("select_detail_interface", list, dict_text)
+		document.getElementById('show_detail_hostname').innerHTML = device_id
+		document.getElementById('show_detail_interface').innerHTML = ''
+		document.getElementById('show_detail_channelID').innerHTML = ''
+		document.getElementById('show_detail_access').innerHTML = ''
+		document.getElementById('show_detail_trunk').innerHTML = ''
+		document.getElementById('show_detail_voice').innerHTML = ''
+		document.getElementById('show_detail_foundMAC').innerHTML = ''
+		document.getElementById('show_description_interface').innerHTML = ''
+	}
+	else if(select_device_id == 'select_uplinkTOR') {
+		emptySelect('select_add_uplinkSingle', 1)
+		var list_sites = []
+		if(set_currentSite.has('everything')) {
+			list_sites = Object.keys(dict_devices)
+		}
+		else {
+			list_sites = Array.from(set_currentSite)
+		}
+		for(var i = 0; i<list_sites.length; i++) {
+			var site_id = list_sites[i]
+			if(device_id in dict_devices[site_id]) {
+				if(dict_devices[site_id][device_id]['is_tor'] == true) {
+					helper_fillSelect("select_add_uplinkSingle", list, dict_text)
+				}
+				break
+			}
+		}
+	}
 }
 
 function update_details() {
@@ -291,13 +336,18 @@ function fillSelect_addGatewaySite(graph) {
 	##########################################################################
 */
 
-function helper_fillSelect(elementID, list) {
-	list.sort()
+function helper_fillSelect(elementID, list_value, dict_text={}) {
+	list_value.sort()
 	var select = document.getElementById(elementID)
-	list.forEach(element => {
+	list_value.forEach(element => {
 		var option = document.createElement('option')
-		option.text = element
 		option.value = element
+		if(element in dict_text) {
+			option.text = 	dict_text[element]
+		}
+		else {
+			option.text = element
+		}
 		select.add(option)
 	});
 }
