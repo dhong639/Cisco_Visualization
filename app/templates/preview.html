@@ -300,7 +300,7 @@
 					<div class="panel">
 						<div class="row">
 							<div class="col-sm-12">
-								<h5>Select Device and Interface</h5>
+								<h4>Select Device and Interface</h4>
 								<p>(Note: uses site_id from "Display Options")</p>
 							</div>
 						</div>
@@ -314,7 +314,7 @@
 								<label for="select_detail_hostname">hostname</label>
 							</div>
 							<div class="col-sm-9">
-								<select id="select_detail_hostname" onchange="fillSelect_intf()">
+								<select id="select_detail_hostname" onchange="fillSelect_intf('select_detail_hostname')">
 									<option value="">(none)</option>
 								</select>
 							</div>
@@ -330,11 +330,6 @@
 								<select id="select_detail_interface" onchange="update_details()">
 									<option value="">(none)</option>
 								</select>
-							</div>
-						</div>
-						<div class="row">
-							<div class="col-sm-12">
-								<button onclick="set_serviceUp(set_currentSite, pending_serviceUp)">set interface as uplink (TOR only)</button>
 							</div>
 						</div>
 						<!--
@@ -442,6 +437,86 @@
 							</div>
 						</div>
 					</div>
+
+					<!--
+						this is the edit uplinks section
+							add and remove uplinks
+							add can be done one-by-one or all at once
+							delete is one-by-one
+					-->
+					<button class="accordion">Edit Service Uplinks</button>
+					<div class="panel">
+						<div class="row">
+							<div class="col-sm-12">
+								<select id="select_uplinkTOR" onchange="fillSelect_intf('select_uplinkTOR')">
+									<option value="">(none)</option>
+								</select>
+							</div>
+						</div>
+						<div class="row">
+							<div class="col-sm-12">
+								<h4>Add Uplinks</h4>
+							</div>
+						</div>
+						<div class="row">
+							<div class="col-sm-9">
+								<select id="select_add_uplinkSingle">
+									<option value="">(none)</option>
+								</select>
+							</div>
+							<div class="col-sm-3">
+								<button type="button" onclick="add_uplinkSingle(pending_uplinkSingle)">add</button>
+							</div>
+						</div>
+						<div class="row">
+							<div class="col-sm-6">
+								<p>Adding single uplinks:</p>
+							</div>
+							<div class="col-sm-6">
+								<p id="pending_uplinkSingle"></p>
+							</div>
+						</div>
+						<div class="row">
+							<div class="col-sm-9">
+								<input id="string_add_uplinkMultiple" style="width: 100%">
+							</div>
+							<div class="col-sm-3">
+								<button type="button" onclick="add_uplinkMultiple(pending_uplinkMultiple, set_currentSite)">add</button>
+							</div>
+						</div>
+						<div class="row">
+							<div class="col-sm-6">
+								<p>Search sites for string:</p>
+							</div>
+							<div class="col-sm-6">
+								<p id="pending_uplinkMultiple"></p>
+							</div>
+						</div>
+						<div class="row">
+							<div class="col-sm-9">
+								<select id="select_del_uplinkMultiple" style="width: 100%">
+									<option value="">(none)</option>
+								</select>
+							</div>
+							<div class="col-sm-3">
+								<button type="button" onclick="del_uplinkMultiple(pending_uplinkMultiple)">remove</button>
+							</div>
+						</div>
+						<div class="row">
+							<div class="col-sm-6">
+								<p>Remove uplinks with:</p>
+							</div>
+							<div class="col-sm-6">
+								<p id="pending_removedString"></p>
+							</div>
+						</div>
+						<div class="row">
+							<div class="col-sm-12">
+								<button onclick="load_graph(pending_device, pending_site, set_currentSite, graph)">set interfaces as uplink (TOR only)</button>
+							</div>
+						</div>
+					</div>
+
 					<!--
 						this is the edit device panel
 							for a given site
@@ -733,16 +808,28 @@
 		// load previously set service uplinks
 		// service uplinks only added to dict_edgeOther for real after preview is confirmed
 		var pending_serviceUp = {}
+		var pending_uplinkSingle = {}
+		var pending_uplinkMultiple = {}
+		var pending_removedString = new Set()
 		for(var device_id in dict_details['dict_serviceUp']) {
 			if(device_id in pending_serviceUp == false) {
 				pending_serviceUp[device_id] = new Set()
 			}
 			dict_details['dict_serviceUp'][device_id].forEach(interface_id => {
 				pending_serviceUp[device_id].add(interface_id)
-				dict_edgeOther[device_id]['layer3'].push([
-					'undefined_serviceUplink',
-					interface_id
-				])
+				if(device_id in pending_serviceUp == false) {
+					pending_serviceUp[device_id] = {
+						'layer3': {},
+						'eth_port': {}
+					}
+				}
+				var other_id = null
+				if(device_id in dict_edgeOther) {
+					if(interface_id in dict_edgeOther[device_id]['eth_port']) {
+						other_id = dict_edgeOther[device_id]['eth_port'][interface_id]
+					}
+				}
+				dict_edgeOther[device_id]['layer3'][interface_id] = other_id
 			})
 		}
 
@@ -852,13 +939,9 @@
 			}
 			var list_site_gateway = graph.get_list_site_gateway()
 			var list_site_ignored = graph.get_list_site_ignored()
-			//document.getElementById('list_tor').value = list_tor.join('|')
 			document.getElementById('list_tor').value = JSON.stringify(list_tor)
-			//document.getElementById('list_unmanaged').value = list_unmanaged.join('|')
 			document.getElementById('list_unmanaged').value = JSON.stringify(list_unmanaged)
-			//document.getElementById('list_site_gateway').value = list_site_gateway.join('|')
 			document.getElementById('list_site_gateway').value = JSON.stringify(list_site_gateway)
-			//document.getElementById('list_site_ignored').value = list_site_ignored.join('|')
 			document.getElementById('list_site_ignored').value = JSON.stringify(list_site_ignored)
 			for(var device_id in pending_serviceUp) {
 				pending_serviceUp[device_id] = Array.from(pending_serviceUp[device_id]).sort()
