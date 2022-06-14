@@ -55,15 +55,15 @@ class ScannerNeighbor:
 			return self.dict_edgeFabric
 
 	def get_edgesOther(self):
-		dict_ = {}
-		for device_id in self.dict_edgeOther:
-			list_layer3 = sorted(self.dict_edgeOther[device_id]['layer3'])
-			list_other = sorted(self.dict_edgeOther[device_id]['eth_port'])
-			dict_[device_id] = {
-				'layer3': list_layer3, 
-				'eth_port': list_other
-			}
-		return dict_
+		#dict_ = {}
+		#for device_id in self.dict_edgeOther:
+		#	list_layer3 = sorted(self.dict_edgeOther[device_id]['layer3'])
+		#	list_other = sorted(self.dict_edgeOther[device_id]['eth_port'])
+		#	dict_[device_id] = {
+		#		'layer3': list_layer3, 
+		#		'eth_port': list_other
+		#	}
+		return self.dict_edgeOther
 
 	def clean_edges(self):
 		for sourceID in self.dict_edgeFabric:
@@ -212,9 +212,9 @@ class ScannerNeighbor:
 	def helper_addFabric(self, sourceID, sourceIntf, targetID, targetIntf, capability):
 		if sourceID in self.dict_edgeOther:
 			if sourceIntf in self.dict_edgeOther[sourceID]['layer3']:
-				self.dict_edgeOther[sourceID]['layer3'].remove(sourceIntf)
+				del self.dict_edgeOther[sourceID]['layer3'][sourceIntf]
 			if sourceIntf in self.dict_edgeOther[sourceID]['eth_port']:
-				self.dict_edgeOther[sourceID]['eth_port'].remove(sourceIntf)
+				del self.dict_edgeOther[sourceID]['eth_port'][sourceIntf]
 		if sourceID not in self.dict_edgeFabric:
 			self.dict_edgeFabric[sourceID] = {}
 		if targetID not in self.dict_edgeFabric[sourceID]:
@@ -229,11 +229,12 @@ class ScannerNeighbor:
 	def helper_addOther(self, sourceID, sourceIntf, capability, platform):
 		if sourceID not in self.dict_edgeOther:
 			self.dict_edgeOther[sourceID] = {
-				'layer3': [],
-				'eth_port': []
+				'layer3': {},
+				'eth_port': {}
 			}
-		if sourceIntf != None and sourceID in self.set_fabric:
+		if sourceIntf != None and sourceID in self.set_fabric and platform not in self.set_fabric:
 			if capability != None and 'r' in capability and 't' not in capability:
-				self.dict_edgeOther[sourceID]['layer3'].append([platform, sourceIntf])
+				self.dict_edgeOther[sourceID]['layer3'][sourceIntf] = platform
 			else:
-				self.dict_edgeOther[sourceID]['eth_port'].append([platform, sourceIntf])
+				self.dict_edgeOther[sourceID]['eth_port'][sourceIntf] = platform
+				#print(self.dict_edgeOther[sourceID]['eth_port'])
