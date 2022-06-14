@@ -25,6 +25,8 @@ function set_label(site_id, device_id) {
 }
 
 function set_other(type, set_validNodes, cy) {
+	var set_node = new Set()
+	var set_edge = new Set()
 	for(var device_id in dict_edgeOther) {
 		if(set_validNodes.has(device_id)) {
 			// get list of source interfaces that are fabric
@@ -34,22 +36,9 @@ function set_other(type, set_validNodes, cy) {
 					set_portFabric.add(pair[0])
 				})
 			}
-			var previous_interface_id = null
-			var count_duplicates = 0
-			dict_edgeOther[device_id][type].forEach(row => {
-				var platform = row[0]
-				var interface_id = row[1]
-				if(interface_id == previous_interface_id) {
-					count_duplicates += 1
-				}
-				else {
-					count_duplicates = 0
-					previous_interface_id = interface_id
-				}
-				// ignore interface_id if already in fabric
-				// used to avoid re-listing interface ids for routers
-				if(set_portFabric.has(interface_id) == false) {
-					//var color = 'Orange
+			for(var source_intf in dict_edgeOther[device_id][type]) {
+				var platform = dict_edgeOther[device_id][type][source_intf]
+				if(set_portFabric.has(source_intf) == false) {
 					var color = '#FFA500'
 					var node_label
 					var shape
@@ -60,12 +49,12 @@ function set_other(type, set_validNodes, cy) {
 						node_label = 'router'
 						shape = 'square'
 					}
-					var edge_id = device_id + '.' + interface_id + '.' + count_duplicates
+					var edge_id = device_id + '.' + source_intf
 					var target_label
 					var line_style
 					var access_vlan = null
 					if(type == 'eth_port') {
-						access_vlan = dict_interfaces[device_id][interface_id]['access_vlan']
+						access_vlan = dict_interfaces[device_id][source_intf]['access_vlan']
 						edge_id += ' - vlan' + access_vlan
 						target_label = 'vlan ' + access_vlan
 						line_style = 'solid'
@@ -75,31 +64,38 @@ function set_other(type, set_validNodes, cy) {
 						line_style = 'dashed'
 					}
 					if(type == 'layer3' || (type == 'eth_port' && access_vlan != null)) {
-						cy.add({
-							data: {
-								id: device_id + '.' + interface_id + '.' + count_duplicates,
-								label: platform + '\n' + node_label,
-								color_main: color,
-								color_invert: invertColor(color),
-								shape: shape,
-								size: 25
-							}
-						})
-						cy.add({
-							data: {
-								id: edge_id,
-								source_label: interface_id,
-								source: device_id,
-								target: device_id + '.' + interface_id + '.' + count_duplicates,
-								target_label: target_label,
-								color_main: color,
-								color_invert: invertColor(color),
-								line_style: line_style
-							}
-						})
+						var node_id = device_id + '.' + source_intf
+						if(!set_node.has(node_id)) {
+							cy.add({
+								data: {
+									id: node_id,
+									label: platform + '\n' + node_label,
+									color_main: color,
+									color_invert: invertColor(color),
+									shape: shape,
+									size: 25
+								}
+							})
+							set_node.add(node_id)
+						}
+						if(!set_edge.has(edge_id)) {
+							cy.add({
+								data: {
+									id: edge_id,
+									source_label: source_intf,
+									source: device_id,
+									target: node_id,
+									target_label: target_label,
+									color_main: color,
+									color_invert: invertColor(color),
+									line_style: line_style
+								}
+							})
+							set_edge.add(edge_id)
+						}
 					}
 				}
-			});
+			}
 		}
 	}
 }
@@ -114,6 +110,10 @@ function load_graph(pending_device, pending_site, set_currentSite, graph) {
 	// clear all preview cells for sites
 	document.getElementById('pending_add_gatewaySite').innerHTML = ''
 	document.getElementById('pending_del_gatewaySite').innerHTML = ''
+	//	clear edit service links
+	document.getElementById('pending_uplinkSingle').innerHTML = ''
+	document.getElementById('pending_uplinkMultiple').innerHTML = ''
+	document.getElementById('pending_removedString').innerHTML = ''
 	/*
 		get list of sites that to display
 			'everything' will display all sites
@@ -300,8 +300,124 @@ function load_graph(pending_device, pending_site, set_currentSite, graph) {
 	var set_validNodes = new Set()
 
 	for(var i = 0; i<list_validSite.length; i++) {
-		site_id = list_validSite[i]
+		var site_id = list_validSite[i]
 		for(var device_id in dict_devices[site_id]) {
+			/**
+			 * if a string is no longer applicable to search for service uplinks,
+			 * it is necessary to remove previously identified service uplinks
+			 * this applies to all sites and all devices
+			 * if the service_uplink points to null, it's probably not an eth port
+			 */
+			console.log(pending_removedString)
+			if(device_id in dict_edgeOther) {
+				var set_layer3_removed = new Set()
+				for(var intf_id in dict_edgeOther[device_id]['layer3']) {
+					var description = dict_interfaces[device_id][intf_id]['description']
+					description = description.toLowerCase()
+					pending_removedString.forEach(removedString => {
+						console.log(description)
+						if(description.includes(removedString)) {
+							set_layer3_removed.add(intf_id)
+							/**
+							 * if possible, try to replace an eth_port if it was removed
+							 * will not work if eth_port naturally ports to a null other_id
+							 */
+							var other_id = dict_edgeOther[device_id]['layer3'][intf_id]
+							if(other_id != null) {
+								dict_edgeOther[device_id]['eth_port'][intf_id] = other_id
+							}
+						}
+					})
+				}
+				set_layer3_removed.forEach(intf_id => {
+					delete dict_edgeOther[device_id]['layer3'][intf_id]
+					pending_serviceUp[device_id].delete(intf_id)
+				})
+			}
+			/**
+			 * check if current device has new service uplinks to handle
+			 * remove if already set as an eth_port
+			 */
+			if(device_id in pending_uplinkSingle) {
+				if(device_id in dict_edgeOther == false) {
+					dict_edgeOther[device_id] = {
+						'layer3': {},
+						'eth_port': {}
+					}
+				}
+				pending_uplinkSingle[device_id].forEach(intf_id => {
+					var other_id = null
+					if(intf_id in dict_edgeOther[device_id]['eth_port']) {
+						other_id = dict_edgeOther[device_id]['eth_port'][intf_id]
+						delete dict_edgeOther[device_id]['eth_port'][intf_id]
+					}
+					dict_edgeOther[device_id]['layer3'][intf_id] = other_id
+					if(device_id in pending_serviceUp == false) {
+						pending_serviceUp[device_id] = new Set()
+					}
+					pending_serviceUp[device_id].add(intf_id)
+				})
+			}
+			/**
+			 *	check if current site has a string to search through
+			 *	check every non-fabric interface description for string
+			 *		ignore for ports that are fabric, check dict_edgesOther
+			 *		no need to check layer3 ports
+			 *		applicable eth ports removed afterwards
+			 *	check description in dict_interfaces of port for string, lowercase
+			 */
+			if(site_id in pending_uplinkMultiple) {
+				if(device_id in dict_edgeOther == false) {
+					dict_edgeOther[device_id] = {
+						'layer3': new Set(),
+						'eth_port': new Set()
+					}
+				}
+				var set_intf = new Set()
+				pending_uplinkMultiple[site_id].forEach(string => {
+					string = string.toLowerCase()
+					console.log(string)
+					for(var intf_id in dict_interfaces[device_id]) {
+						var flag = false
+						//	avoid fabric edges
+						for(var target_id in dict_edgeFabric[device_id]) {
+							dict_edgeFabric[device_id][target_id]['pairs'].forEach(pair => {
+								if(pair[0] == intf_id) {
+									flag = true
+								}
+							})
+						}
+						if(flag == false) {
+							//	search description string for occurence of string
+							var description = dict_interfaces[device_id][intf_id]['description']
+							if(description != null && description.toLowerCase().includes(string)) {
+								set_intf.add(intf_id)
+							}
+						}
+					}
+				})
+				/**
+				 * may be necessary to remove service uplinks first
+				 * if user decides that a search string is inapplicable,
+				 * the change would not be reflected
+				 * instead, what's happening is that there is a set of revoked search strings,
+				 * and anything in the set cannot be considered a service up
+				 */
+				set_intf.forEach(intf_id => {
+					var other_id = null
+					if(intf_id in dict_edgeOther[device_id]['eth_port']) {
+						other_id = dict_edgeOther[device_id]['eth_port'][intf_id]
+						delete dict_edgeOther[device_id]['eth_port'][intf_id]
+					}
+					dict_edgeOther[device_id]['layer3'][intf_id] = other_id
+					if(device_id in pending_serviceUp == false) {
+						pending_serviceUp[device_id] = new Set()
+					}
+					pending_serviceUp[device_id].add(intf_id)
+				})
+			}
+			
+			//	start setting cytoscape content
 			set_validNodes.add(device_id)
 			var device = dict_devices[site_id][device_id]
 			var hostname = device['hostname']
@@ -342,6 +458,9 @@ function load_graph(pending_device, pending_site, set_currentSite, graph) {
 			})
 		}
 	}
+	pending_uplinkSingle = {}
+	pending_uplinkMultiple = {}
+	pending_removedString = new Set()
 
 	var set_edgeID = new Set()
 	for(var source_id in dict_edgeFabric) {
